@@ -286,6 +286,9 @@ function setProjectPackageManager(pmName, projectDir = process.cwd()) {
 // Allowed characters in script/binary names: alphanumeric, dash, underscore, dot, slash, @
 // This prevents shell metacharacter injection while allowing scoped packages (e.g., @scope/pkg)
 const SAFE_NAME_REGEX = /^[@a-zA-Z0-9_./-]+$/;
+// Script names commonly use namespaces such as test:unit and build:client.
+// Keep this separate from executable package names, which do not use colons.
+const SAFE_SCRIPT_NAME_REGEX = /^[@a-zA-Z0-9_./:-]+$/;
 
 /**
  * Get the command to run a script
@@ -297,7 +300,7 @@ function getRunCommand(script, options = {}) {
   if (!script || typeof script !== 'string') {
     throw new Error('Script name must be a non-empty string');
   }
-  if (!SAFE_NAME_REGEX.test(script)) {
+  if (!SAFE_SCRIPT_NAME_REGEX.test(script)) {
     throw new Error(`Script name contains unsafe characters: ${script}`);
   }
 
