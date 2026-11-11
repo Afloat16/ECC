@@ -810,6 +810,50 @@ function runTests() {
   })) passed++;
   else failed++;
 
+  if (test('rearms context reminders after compaction below the threshold', () => {
+    const ctx = createContextContext();
+    const transcript = writeTranscriptFixture(170000);
+    const input = { session_id: ctx.sessionId, transcript_path: transcript };
+    const env = { COMPACT_THRESHOLD: '10000' };
+    try {
+      assert.ok(runCompactWithInput(input, env).stdout.includes('Context ~170k tokens'));
+      writeTranscriptTokens(transcript, 100000);
+      assert.strictEqual(runCompactWithInput(input, env).stdout.trim(), '');
+      assert.strictEqual(runCompactWithInput(input, env).stdout.trim(), '');
+      writeTranscriptTokens(transcript, 170000);
+      assert.ok(runCompactWithInput(input, env).stdout.includes('Context ~170k tokens'),
+        'Growing into the same bucket after compaction should remind again');
+      assert.strictEqual(runCompactWithInput(input, env).stdout.trim(), '',
+        'The new growth cycle must still deduplicate repeated observations');
+    } finally {
+      fs.unlinkSync(transcript);
+      ctx.cleanup();
+    }
+  })) passed++;
+  else failed++;
+
+  if (test('missing usage and disabled context checks do not rearm reminders', () => {
+    const ctx = createContextContext();
+    const transcript = writeTranscriptFixture(170000);
+    const input = { session_id: ctx.sessionId, transcript_path: transcript };
+    const env = { COMPACT_THRESHOLD: '10000' };
+    try {
+      assert.ok(runCompactWithInput(input, env).stdout.includes('Context ~170k tokens'));
+      fs.writeFileSync(transcript, '{}\n');
+      assert.strictEqual(runCompactWithInput(input, env).stdout.trim(), '');
+      writeTranscriptTokens(transcript, 170000);
+      assert.strictEqual(runCompactWithInput(input, env).stdout.trim(), '');
+      writeTranscriptTokens(transcript, 100000);
+      assert.strictEqual(runCompactWithInput(input, { ...env, COMPACT_CONTEXT_THRESHOLD: '0' }).stdout.trim(), '');
+      writeTranscriptTokens(transcript, 170000);
+      assert.strictEqual(runCompactWithInput(input, env).stdout.trim(), '');
+    } finally {
+      fs.unlinkSync(transcript);
+      ctx.cleanup();
+    }
+  })) passed++;
+  else failed++;
+
   if (test('re-fires after the context grows by another interval', () => {
     const ctx = createContextContext();
     const transcript = writeTranscriptFixture(170000);

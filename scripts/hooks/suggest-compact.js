@@ -177,7 +177,11 @@ function buildContextSuggestion(transcriptPath, bucketFile, env) {
 
     const interval = resolveContextInterval(env);
     const bucket = computeContextBucket(usage.tokens, threshold, interval);
-    if (bucket < 0) return null;
+    if (bucket < 0) {
+      // Compaction starts a new growth cycle; old buckets must not suppress it.
+      fs.rmSync(bucketFile, { force: true });
+      return null;
+    }
 
     const lastBucket = readLastContextBucket(bucketFile);
     if (bucket <= lastBucket) return null;
