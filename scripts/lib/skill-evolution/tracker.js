@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 
 const { ensureDir } = require('../utils');
+const { withStateStoreLock } = require('../state-store/file-lock');
 
 const VALID_OUTCOMES = new Set(['success', 'failure', 'partial']);
 const VALID_FEEDBACK = new Set(['accepted', 'corrected', 'rejected']);
@@ -131,15 +132,19 @@ function appendRunRecord(runsFilePath, record, options = {}) {
     : MAX_RUN_RECORDS;
 
   ensureDir(path.dirname(runsFilePath));
-  fs.appendFileSync(runsFilePath, `${JSON.stringify(record)}\n`, { encoding: 'utf8', mode: RUNS_FILE_MODE });
+  // Appending and trimming must share one transaction: otherwise a trimmer can
+  // overwrite a newer run after another hook has already reported success.
+  withStateStoreLock(runsFilePath, () => {
+    fs.appendFileSync(runsFilePath, `${JSON.stringify(record)}\n`, { encoding: 'utf8', mode: RUNS_FILE_MODE });
 
-  try {
-    fs.chmodSync(runsFilePath, RUNS_FILE_MODE);
-  } catch {
-    // Windows and some mounts do not support POSIX modes; the record still lands.
-  }
+    try {
+      fs.chmodSync(runsFilePath, RUNS_FILE_MODE);
+    } catch {
+      // Windows and some mounts do not support POSIX modes; the record still lands.
+    }
 
-  pruneRunRecords(runsFilePath, maxRecords);
+    pruneRunRecords(runsFilePath, maxRecords);
+  });
 }
 
 // Keep only the newest `maxRecords` lines. Rewrites the whole file, which is
