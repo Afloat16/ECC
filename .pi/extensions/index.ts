@@ -692,6 +692,10 @@ export default function (pi: ExtensionAPI): void {
     // `before_agent_start` consumes the previous value, and replaying context
     // built for a different session would describe the wrong project state.
     pendingContext = undefined
+    // Pi may reuse the extension factory without reloading this module.
+    // The portable-rule snapshot belongs to the new session, not the process.
+    cachedRules = undefined
+    cachedRuleFileCount = 0
 
     const result = await runEccHook(
       SESSION_START_HOOK,
