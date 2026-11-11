@@ -65,6 +65,8 @@ def select_provider(providers: list[tuple[str, str]]) -> str | None:
             if 0 <= idx < len(providers):
                 return providers[idx][0]
             print(f"{Color.YELLOW}Invalid selection. Try again.{Color.RESET}")
+        except (EOFError, KeyboardInterrupt):
+            return None
         except ValueError:
             print(f"{Color.YELLOW}Please enter a number.{Color.RESET}")
 
@@ -87,6 +89,8 @@ def select_model(models: list[tuple[str, str]]) -> str | None:
             if 0 <= idx < len(models):
                 return models[idx][0]
             print(f"{Color.YELLOW}Invalid selection. Try again.{Color.RESET}")
+        except (EOFError, KeyboardInterrupt):
+            return None
         except ValueError:
             print(f"{Color.YELLOW}Please enter a number.{Color.RESET}")
 

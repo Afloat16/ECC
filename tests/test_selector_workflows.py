@@ -206,7 +206,10 @@ def test_cli_reprompts_for_malformed_and_out_of_range_choices(
     assert operator.selection() == ["ollama", "mistral"]
 
 
-@pytest.mark.parametrize("answers", [" \n", "3\n\t\n"], ids=["provider", "model"])
+@pytest.mark.parametrize(
+    "answers", [" \n", "3\n\t\n", "", "3\n"],
+    ids=["provider", "model", "provider-eof", "model-eof"],
+)
 @pytest.mark.parametrize(
     "existing", [False, True], ids=["new-project", "saved-project"]
 )
@@ -231,6 +234,41 @@ def test_cli_cancellation_preserves_existing_config_or_creates_nothing(
         assert operator.selection() == ["ollama", "codellama"]
     else:
         assert not config.exists()
+
+
+@pytest.mark.parametrize("stage", ["provider", "model"])
+def test_keyboard_interrupt_cancels_without_overwriting_selection(
+    operator: Operator,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    stage: str,
+) -> None:
+    config = operator.project / ".llm.env"
+    original = "# retained notes\nLLM_PROVIDER=openai\nLLM_MODEL=saved-model\n"
+    config.write_text(original)
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_MODEL", "saved-model")
+    answers = iter(["3"] if stage == "model" else [])
+
+    def interrupted_input(_prompt: str) -> str:
+        try:
+            return next(answers)
+        except StopIteration:
+            raise KeyboardInterrupt from None
+
+    monkeypatch.setattr("builtins.input", interrupted_input)
+    try:
+        main()
+    except (SystemExit, KeyboardInterrupt) as cancelled:
+        assert isinstance(cancelled, SystemExit), "selection leaked KeyboardInterrupt"
+        assert cancelled.code == 0
+    else:
+        pytest.fail("cancelled selection did not use the CLI cancellation path")
+
+    assert "Selection cancelled." in capsys.readouterr().out
+    assert config.read_text() == original
+    assert os.environ["LLM_PROVIDER"] == "openai"
+    assert os.environ["LLM_MODEL"] == "saved-model"
 
 
 @pytest.mark.parametrize(
