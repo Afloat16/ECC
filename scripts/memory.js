@@ -181,6 +181,7 @@ function readBoundedStdin(maxBytes, retryOptions = {}) {
       continue;
     }
     if (bytesRead === 0) break;
+    remainingRetryWaitMs = maxRetryWaitMs;
     chunks.push(buffer.subarray(0, bytesRead));
     total += bytesRead;
   }
