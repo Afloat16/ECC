@@ -110,16 +110,19 @@ function rewriteRelativeLinks(content, options) {
   const installedSourceDir = posix.dirname(installedSource);
   const sourceDir = posix.dirname(normalizedSource);
   const lines = String(content).split('\n');
-  let inFence = false;
+  let fence = null;
 
   for (let i = 0; i < lines.length; i += 1) {
-    const fenceToggle = /^\s*(```|~~~)/.test(lines[i]);
-    if (fenceToggle) {
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence) {
+    const marker = /^\s*(`{3,}|~{3,})(.*)\r?$/.exec(lines[i]);
+    if (fence) {
+      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) {
+        fence = null;
+      }
       continue; // never rewrite inside fenced code blocks
+    }
+    if (marker) {
+      fence = marker[1];
+      continue;
     }
 
     lines[i] = lines[i].replace(
