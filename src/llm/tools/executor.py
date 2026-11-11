@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from llm.core.interface import LLMError
@@ -136,12 +137,11 @@ class ReActAgent:
         tools = input.tools or []
 
         for _ in range(self.max_iterations):
-            input_copy = LLMInput(
+            input_copy = replace(
+                input,
                 messages=messages,
-                model=input.model,
-                temperature=input.temperature,
-                max_tokens=input.max_tokens,
                 tools=tools,
+                metadata=input.metadata.copy(),
             )
 
             try:
