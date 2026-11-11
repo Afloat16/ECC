@@ -155,21 +155,16 @@ function fileExists(projectDir, filePath) {
 }
 
 /**
- * Check if any file with given extension exists in the project root (non-recursive, top-level only)
+ * Read the source extensions in one project-root directory snapshot.
  * @param {string} projectDir - Project root directory
- * @param {string[]} extensions - File extensions to check
- * @returns {boolean}
+ * @returns {Set<string>}
  */
-function hasFileWithExtension(projectDir, extensions) {
+function getProjectExtensions(projectDir) {
   try {
     const entries = fs.readdirSync(projectDir, { withFileTypes: true });
-    return entries.some(entry => {
-      if (!entry.isFile()) return false;
-      const ext = path.extname(entry.name);
-      return extensions.includes(ext);
-    });
+    return new Set(entries.filter(entry => entry.isFile()).map(entry => path.extname(entry.name)));
   } catch {
-    return false;
+    return new Set();
   }
 }
 
@@ -372,11 +367,12 @@ function detectProjectType(projectDir) {
   projectDir = projectDir || process.cwd();
   const languages = [];
   const frameworks = [];
+  const extensions = getProjectExtensions(projectDir);
 
   // Step 1: Detect languages
   for (const rule of LANGUAGE_RULES) {
     const hasMarker = rule.markers.some(m => fileExists(projectDir, m));
-    const hasExt = rule.extensions.length > 0 && hasFileWithExtension(projectDir, rule.extensions);
+    const hasExt = rule.extensions.some(extension => extensions.has(extension));
 
     if (hasMarker || hasExt) {
       languages.push(rule.type);
