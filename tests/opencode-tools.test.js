@@ -234,6 +234,52 @@ async function main() {
     ])
   }
 
+  tests.push([
+    "git-summary: an unchanged base is a successful empty diff",
+    async () => withTempProject([], async (projectDir) => {
+      const git = (...args) => {
+        const result = spawnSync("git", args, { cwd: projectDir, encoding: "utf8" })
+        assert.strictEqual(result.status, 0, result.stderr)
+        return result.stdout.trim()
+      }
+      git("init")
+      git("config", "user.email", "test@test.com")
+      git("config", "user.name", "Test")
+      fs.writeFileSync(path.join(projectDir, "tracked.txt"), "initial content")
+      git("add", "tracked.txt")
+      git("commit", "-m", "initial")
+      const baseBranch = git("branch", "--show-current")
+      const result = JSON.parse(await tools.gitsummary.execute({ baseBranch }, createMockContext(projectDir)))
+      assert.strictEqual(result.status, "clean")
+      assert.strictEqual(result.branchDiff, "")
+      assert.strictEqual(result.stagedDiff, "")
+      const missing = JSON.parse(await tools.gitsummary.execute({ baseBranch: "missing-branch" }, createMockContext(projectDir)))
+      assert.strictEqual(missing.branchDiff, "unable to diff against missing-branch")
+    }),
+  ])
+
+  tests.push([
+    "git-summary: an unavailable repository is not reported as clean",
+    async () => withTempProject([], async (projectDir) => {
+      const result = JSON.parse(await tools.gitsummary.execute({}, createMockContext(projectDir)))
+      assert.strictEqual(result.status, "unable to read git status")
+      assert.strictEqual(result.stagedDiff, "unable to read staged diff")
+    }),
+  ])
+
+  tests.push([
+    "git-summary: invalid base refs retain an explicit diagnostic",
+    async () => withTempProject([], async (projectDir) => {
+      for (const baseBranch of ["", "main;echo", "-main", "feature..next"]) {
+        const result = JSON.parse(await tools.gitsummary.execute(
+          { baseBranch },
+          { directory: projectDir }
+        ))
+        assert.strictEqual(result.branchDiff, `unable to diff against ${baseBranch} (invalid ref)`)
+      }
+    }),
+  ])
+
   // Test changed-files tool
   if (tools.changedfiles) {
     tests.push([

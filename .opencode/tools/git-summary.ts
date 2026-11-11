@@ -47,16 +47,17 @@ const gitSummaryTool: ToolDefinition = tool({
     const includeDiff = args.includeDiff ?? true
     const baseBranch = args.baseBranch ?? "main"
 
+    const status = runArgs(["status", "--short"], cwd)
     const result: Record<string, string> = {
       branch: runArgs(["branch", "--show-current"], cwd) || "unknown",
-      status: runArgs(["status", "--short"], cwd) || "clean",
+      status: status === null ? "unable to read git status" : status || "clean",
       log: runArgs(["log", "--oneline", `-${depth}`], cwd) || "no commits found",
     }
 
     if (includeDiff) {
-      result.stagedDiff = runArgs(["diff", "--cached", "--stat"], cwd) || ""
+      result.stagedDiff = runArgs(["diff", "--cached", "--stat"], cwd) ?? "unable to read staged diff"
       result.branchDiff = isSafeRef(baseBranch)
-        ? runArgs(["diff", `${baseBranch}...HEAD`, "--stat"], cwd) ||
+        ? runArgs(["diff", `${baseBranch}...HEAD`, "--stat"], cwd) ??
           `unable to diff against ${baseBranch}`
         : `unable to diff against ${baseBranch} (invalid ref)`
     }
@@ -67,10 +68,10 @@ const gitSummaryTool: ToolDefinition = tool({
 
 export default gitSummaryTool
 
-function runArgs(args: string[], cwd: string): string {
+function runArgs(args: string[], cwd: string): string | null {
   try {
     return execFileSync("git", args, { cwd, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }).trim()
   } catch {
-    return ""
+    return null
   }
 }
