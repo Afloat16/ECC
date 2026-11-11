@@ -85,17 +85,13 @@ function bucketByDay(records, nowMs, days) {
   }));
 }
 
-function getTrendArrow(successRate7d, successRate30d) {
-  if (successRate7d === null || successRate30d === null) {
-    return '\u2192';
-  }
-
-  const delta = successRate7d - successRate30d;
-  if (delta >= 0.1) {
+function getTrendArrow(successRate7d, successRate30d, warnThreshold = 0.1) {
+  const trend = health.getFailureTrend(successRate7d, successRate30d, warnThreshold);
+  if (trend === 'improving') {
     return '\u2197';
   }
 
-  if (delta <= -0.1) {
+  if (trend === 'worsening') {
     return '\u2198';
   }
 
@@ -142,7 +138,7 @@ function renderSuccessRatePanel(records, skills, options = {}) {
     const records30d = health.filterRecordsWithinDays(skillRecords, nowMs, 30);
     const current7d = health.calculateSuccessRate(records7d);
     const current30d = health.calculateSuccessRate(records30d);
-    const trend = getTrendArrow(current7d, current30d);
+    const trend = getTrendArrow(current7d, current30d, options.warnThreshold);
 
     skillData.push({
       skill_id: skillId,
@@ -354,7 +350,9 @@ function renderDashboard(options = {}) {
   const summary = health.summarizeHealthReport(report);
 
   const panelRenderers = {
-    'success-rate': () => renderSuccessRatePanel(records, report.skills, dashboardOptions),
+    'success-rate': () => renderSuccessRatePanel(records, report.skills, {
+      ...dashboardOptions, warnThreshold: report.warn_threshold,
+    }),
     'failures': () => renderFailureClusterPanel(records, dashboardOptions),
     'amendments': () => renderAmendmentPanel(skillsById, dashboardOptions),
     'versions': () => renderVersionTimelinePanel(skillsById, dashboardOptions),

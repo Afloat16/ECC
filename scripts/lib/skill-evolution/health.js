@@ -283,5 +283,6 @@ module.exports = {
   discoverSkills,
   filterRecordsWithinDays,
   formatHealthReport,
+  getFailureTrend,
   summarizeHealthReport,
 };
