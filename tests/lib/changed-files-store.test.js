@@ -77,6 +77,28 @@ async function runTests() {
   else failed++
 
   if (
+    test('edits preserve the added classification across normalized paths', () => {
+      clearChanges()
+      initStore(worktree)
+      recordChange('src/new.ts', 'added')
+      recordChange(path.join(worktree, 'src', 'new.ts'), 'modified')
+      recordChange('src/new.ts', 'modified')
+      assert.deepStrictEqual(getChangedPaths('added'), [
+        { path: path.join('src', 'new.ts'), changeType: 'added' }
+      ])
+      assert.deepStrictEqual(getChangedPaths('modified'), [])
+      assert.strictEqual(buildTree('added')[0].children[0].changeType, 'added')
+      recordChange('src/new.ts', 'deleted')
+      assert.strictEqual(getChangedPaths()[0].changeType, 'deleted')
+      clearChanges()
+      recordChange('src/new.ts', 'modified')
+      assert.strictEqual(getChangedPaths()[0].changeType, 'modified')
+    })
+  )
+    passed++
+  else failed++
+
+  if (
     test('buildTree returns nested structure', () => {
       clearChanges()
       initStore(worktree)

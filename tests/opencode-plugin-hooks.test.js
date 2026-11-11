@@ -256,6 +256,34 @@ async function main() {
       }),
     ],
     [
+      "new files stay added after edit callbacks and watcher updates",
+      async () => withTempProject([], async (projectDir) => {
+        const hooks = await ECCHooksPlugin({
+          client: createClient(), $: createFailingShell(), directory: projectDir,
+        })
+        await hooks["session.deleted"]()
+        const filePath = path.join(projectDir, "new.txt")
+        const write = { tool: "write", callID: "create-new", args: { filePath } }
+        try {
+          await hooks["tool.execute.before"](write)
+          fs.writeFileSync(filePath, "created")
+          await hooks["tool.execute.after"](write, {})
+          fs.appendFileSync(filePath, " and edited")
+          await hooks["file.edited"]({ path: filePath })
+          await hooks["tool.execute.after"]({ tool: "edit", args: { filePath } }, {})
+          await hooks["file.watcher.updated"]({ path: filePath, type: "change" })
+          const result = JSON.parse(await hooks.tool["changed-files"].execute(
+            { format: "json", filter: "added" },
+            { worktree: projectDir, directory: projectDir }
+          ))
+          assert.deepStrictEqual(result.files, [{ path: "new.txt", changeType: "added" }])
+          assert.deepStrictEqual(result.diffCommands, [])
+        } finally {
+          await hooks["session.deleted"]()
+        }
+      }),
+    ],
+    [
       "shell.env detects project markers without shelling out to test -f",
       async () => withTempProject(
         ["pnpm-lock.yaml", "tsconfig.json", "pyproject.toml"],

@@ -22,6 +22,8 @@ function toRelative(p: string): string {
 export function recordChange(filePath: string, type: ChangeType): void {
   const rel = toRelative(filePath)
   if (!rel) return
+  // Editing a file created in this session does not make it pre-existing.
+  if (type === "modified" && changes.get(rel) === "added") return
   changes.set(rel, type)
 }
 
