@@ -76,7 +76,7 @@ class OllamaProvider(LLMProvider):
             if prefilled_reasoning is not None
             else prefilled_reasoning_from_env("OLLAMA_PREFILLED_REASONING")
         )
-        self.base_url = base_url or os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.base_url = (base_url or os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")).rstrip("/")
         self.default_model = default_model or read_model_env("OLLAMA_MODEL") or "llama3.2"
         self._models = [
             ModelInfo(
