@@ -447,10 +447,12 @@ function runReadCommand({ options, positionals, roots }) {
 
 function runDoctorCommand({ command, options, positionals, roots }) {
   requireNoPositionals(positionals, command);
-  return printDoctor(doctorMemoryVault({
+  const report = doctorMemoryVault({
     roots,
     scopes: options.scopes,
-  }), options.json);
+  });
+  printDoctor(report, options.json);
+  process.exitCode = report.ok ? 0 : 1;
 }
 
 const COMMAND_HANDLERS = Object.freeze({
