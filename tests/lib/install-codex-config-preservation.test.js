@@ -86,6 +86,66 @@ function lifecycleResult(report) {
   return report.results[0];
 }
 
+function withConfigPathIdentity(fixture, platform, identity, action) {
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const originalLstat = fs.lstatSync;
+  fs.lstatSync = function (filename, options) {
+    const stats = originalLstat.call(fs, filename, options);
+    if (filename !== fixture.destination('config.toml') || !options?.bigint) return stats;
+    return Object.assign(Object.create(stats), identity(stats));
+  };
+  Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+  try { return action(); }
+  finally {
+    fs.lstatSync = originalLstat;
+    Object.defineProperty(process, 'platform', originalPlatform);
+  }
+}
+
+for (const action of ['reinstall', 'repair']) {
+  for (const edited of [false, true]) {
+    test(`${action} handles missing Windows device metadata for Codex config (edited=${edited})`, t => {
+      const fixture = createFixture(t);
+      fixture.install();
+      const updated = '# Updated ECC configuration\nmodel = "new-example-model"\n';
+      const personal = '# Personal preferences\nmodel = "personal-model"\n';
+      writeFile(fixture.template('config.toml'), updated);
+      if (edited) writeFile(fixture.destination('config.toml'), personal);
+
+      const result = withConfigPathIdentity(fixture, 'win32', () => ({ dev: 0n }), () => (
+        action === 'reinstall' ? fixture.install() : lifecycleResult(fixture.repair())
+      ));
+
+      assertPreserved(fixture, 'config.toml', edited ? personal : updated);
+      if (edited) {
+        assertUnmanaged(fixture, 'config.toml');
+        assertWarning(result, 'config.toml');
+      } else {
+        assert.ok(readInstallState(fixture.statePath).operations.some(operation => (
+          operation.destinationPath === fixture.destination('config.toml') && operation.ownership === 'managed'
+        )));
+      }
+    });
+  }
+}
+
+for (const [label, platform, identity] of [
+  ['different inode', 'win32', stats => ({ dev: 0n, ino: stats.ino + 1n })],
+  ['different known device', 'win32', stats => ({ dev: stats.dev + 1n })],
+  ['missing device outside Windows', 'linux', () => ({ dev: 0n })],
+]) {
+  test(`Codex reinstall still rejects ${label}`, t => {
+    const fixture = createFixture(t);
+    fixture.install();
+    const original = fs.readFileSync(fixture.destination('config.toml'));
+    const state = fs.readFileSync(fixture.statePath);
+    assert.throws(() => withConfigPathIdentity(fixture, platform, identity, () => fixture.install()),
+      /Refusing to inspect changed Codex configuration/);
+    assert.deepEqual(fs.readFileSync(fixture.destination('config.toml')), original);
+    assert.deepEqual(fs.readFileSync(fixture.statePath), state);
+  });
+}
+
 function assertPreserved(fixture, name, content) {
   assert.deepEqual(fs.readFileSync(fixture.destination(name)), Buffer.from(content));
 }
