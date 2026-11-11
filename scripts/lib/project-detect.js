@@ -189,6 +189,22 @@ function getPackageJsonDeps(projectDir) {
   }
 }
 
+/** Read project requirement strings without making the TOML parser a startup dependency. */
+function getPyprojectRequirements(content) {
+  let toml;
+  try {
+    // Keep SessionStart loadable in plugin clones without node_modules.
+    toml = require('@iarna/toml');
+  } catch (error) {
+    if (error.code !== 'MODULE_NOT_FOUND' || !error.message.includes("'@iarna/toml'")) throw error;
+    // Preserve dependency-free installations' existing best-effort behavior.
+    const block = content.match(/dependencies\s*=\s*\[([\s\S]*?)\]/)?.[1];
+    return (block?.match(/"([^"]+)"/g) || []).map(value => value.slice(1, -1));
+  }
+  const requirements = toml.parse(content).project?.dependencies;
+  return Array.isArray(requirements) ? requirements.filter(value => typeof value === 'string') : [];
+}
+
 /**
  * Read requirements.txt or pyproject.toml for Python package names
  * @param {string} projectDir - Project root directory
@@ -220,22 +236,14 @@ function getPythonDeps(projectDir) {
     /* ignore */
   }
 
-  // pyproject.toml — simple extraction of dependency names
+  // pyproject.toml — read only the project's declared dependency array.
   try {
     const tomlPath = path.join(projectDir, 'pyproject.toml');
     if (fs.existsSync(tomlPath)) {
       const content = fs.readFileSync(tomlPath, 'utf8');
-      const depMatches = content.match(/dependencies\s*=\s*\[([\s\S]*?)\]/);
-      if (depMatches) {
-        const block = depMatches[1];
-        block.match(/"([^"]+)"/g)?.forEach(m => {
-          const name = m
-            .replace(/"/g, '')
-            .split(/[\s>=<!~@[;]/)[0]
-            .trim()
-            .toLowerCase();
-          if (name) deps.push(name);
-        });
+      for (const requirement of getPyprojectRequirements(content)) {
+        const name = requirement.split(/[\s>=<!~@[;]/)[0].trim().toLowerCase();
+        if (name) deps.push(name);
       }
     }
   } catch {
