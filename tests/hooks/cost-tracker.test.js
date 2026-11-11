@@ -789,6 +789,36 @@ function runTests() {
     }
   }) ? passed++ : failed++);
 
+  (test('keeps valid usage around non-record JSON transcript values', () => {
+    const tmpHome = makeTempDir();
+    const sessionId = `non-record-${process.pid}`;
+    const transcriptPath = path.join(tmpHome, 'session.jsonl');
+    const message = (id, input, output) => ({
+      type: 'assistant',
+      message: { id, model: 'claude-sonnet-4-6', usage: { input_tokens: input, output_tokens: output } },
+    });
+    writeTranscript(transcriptPath, [
+      message('first', 1000, 100), null, false, 42, 'status', [], {},
+      message('second', 2000, 200),
+    ]);
+    try {
+      const result = runScript({ session_id: sessionId, transcript_path: transcriptPath }, {
+        ...withTempHome(tmpHome),
+        ECC_AGENT_DATA_HOME: path.join(tmpHome, '.claude'),
+        CLAUDE_CONFIG_DIR: path.join(tmpHome, '.claude'),
+      });
+      assert.strictEqual(result.code, 0);
+      const metricsDir = path.join(tmpHome, '.claude', 'metrics');
+      const row = JSON.parse(fs.readFileSync(path.join(metricsDir, 'costs.jsonl'), 'utf8').trim());
+      assert.strictEqual(row.input_tokens, 3000);
+      assert.strictEqual(row.output_tokens, 300);
+      assert.ok(row.estimated_cost_usd > 0);
+      assert.strictEqual(JSON.parse(fs.readFileSync(getCostSnapshotPath(metricsDir, sessionId), 'utf8')).row.input_tokens, 3000);
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exitCode = failed > 0 ? 1 : 0;
 }

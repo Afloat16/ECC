@@ -165,7 +165,7 @@ function sumUsageFromTranscript(transcriptPath) {
     let entry;
     try { entry = JSON.parse(line); } catch { continue; }
 
-    if (entry.type !== 'assistant') continue;
+    if (!entry || typeof entry !== 'object' || entry.type !== 'assistant') continue;
     const msg = entry.message;
     if (!msg || !msg.usage) continue;
 
