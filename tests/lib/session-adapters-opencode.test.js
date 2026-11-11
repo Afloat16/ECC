@@ -215,5 +215,55 @@ test('resolveGitBranch real path returns null outside a repo', () => {
   assert.strictEqual(parsed.branch, null);
 });
 
+test('selects the newest assistant model from the recent message window', () => {
+  const storageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-oc-current-model-'));
+  try {
+    const id = 'ses_CURRENT';
+    const fp = writeSession(storageDir, 'project', id, { id, title: 'Switch models' }, []);
+    const messageDir = path.join(storageDir, 'message', id);
+    const writeMessage = (sequence, value) => {
+      const name = `msg_${sequence.toString(16).padStart(12, '0')}abcdefghijklmn.json`;
+      fs.writeFileSync(path.join(messageDir, name), JSON.stringify(value));
+    };
+    writeMessage(1, { role: 'assistant', modelID: 'old-model', providerID: 'old-provider' });
+    for (let i = 2; i < 80; i++) writeMessage(i, { role: 'user' });
+    writeMessage(80, { role: 'assistant', modelID: 'current-model', providerID: 'current-provider' });
+    writeMessage(81, { role: 'user' });
+    writeMessage(82, { role: 'assistant' });
+    const parsed = parseOpencodeSession(fp, { storageDir, resolveBranchImpl: () => null });
+    assert.strictEqual(parsed.model, 'current-model');
+    assert.strictEqual(parsed.provider, 'current-provider');
+    assert.strictEqual(parsed.messageCount, 82);
+  } finally {
+    fs.rmSync(storageDir, { recursive: true, force: true });
+  }
+});
+
+test('keeps the model scan bounded to forty recent message files', () => {
+  const storageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-oc-model-budget-'));
+  const originalRead = fs.readFileSync;
+  try {
+    const id = 'ses_BOUNDED';
+    const fp = writeSession(storageDir, 'project', id, { id }, []);
+    const messageDir = path.join(storageDir, 'message', id);
+    for (let i = 0; i < 60; i++) {
+      const name = `msg_${i.toString(16).padStart(12, '0')}abcdefghijklmn.json`;
+      fs.writeFileSync(path.join(messageDir, name), JSON.stringify({ role: 'user' }));
+    }
+    let reads = 0;
+    fs.readFileSync = function(file, ...args) {
+      if (typeof file === 'string' && path.dirname(file) === messageDir) reads++;
+      return originalRead.call(this, file, ...args);
+    };
+    const parsed = parseOpencodeSession(fp, { storageDir, resolveBranchImpl: () => null });
+    assert.strictEqual(parsed.model, null);
+    assert.strictEqual(parsed.provider, null);
+    assert.strictEqual(reads, 40);
+  } finally {
+    fs.readFileSync = originalRead;
+    fs.rmSync(storageDir, { recursive: true, force: true });
+  }
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

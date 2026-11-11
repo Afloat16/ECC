@@ -169,7 +169,10 @@ function readMessageFiles(messageDir) {
 }
 
 function deriveModelFromMessages(messageFiles) {
-  for (const filePath of messageFiles.slice(0, MAX_MESSAGE_SCAN)) {
+  // OpenCode generates ascending, time-ordered message IDs. Read the newest
+  // filenames first so a model change is visible without scanning the history.
+  const recentMessages = [...messageFiles].sort().reverse().slice(0, MAX_MESSAGE_SCAN);
+  for (const filePath of recentMessages) {
     let message;
     try {
       message = JSON.parse(fs.readFileSync(filePath, 'utf8'));
