@@ -636,7 +636,6 @@ function searchMemories(query, options = {}) {
     .map(entry => ({
       ...entry,
       score: normalizedQuery ? scoreMemory(entry.memory, normalizedQuery) : 0,
-      excerpt: buildExcerpt(entry.memory.body, normalizedQuery),
     }))
     .filter(result => normalizedQuery.length === 0 || result.score > 0)
     .sort((left, right) => (
@@ -648,7 +647,7 @@ function searchMemories(query, options = {}) {
     .map(result => ({
       memory: summarizeMemory(result.memory),
       score: result.score,
-      excerpt: result.excerpt,
+      excerpt: buildExcerpt(result.memory.body, normalizedQuery),
     }));
 
   return {
