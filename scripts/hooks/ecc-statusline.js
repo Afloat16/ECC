@@ -181,9 +181,12 @@ function runStatusline() {
 
       // Write context % back to bridge for context-monitor
       if (sessionId && bridge && remaining !== null && remaining !== undefined) {
-        bridge.context_remaining_pct = remaining;
         try {
-          writeBridgeAtomic(sessionId, bridge);
+          writeBridgeAtomic(sessionId, {
+            ...bridge,
+            context_remaining_pct: remaining,
+            context_timestamp: new Date().toISOString()
+          });
         } catch {
           /* best effort */
         }

@@ -223,7 +223,10 @@ function run(rawInput) {
 
     // Stale check for context warnings
     const now = Math.floor(Date.now() / 1000);
-    const lastTs = bridge.last_timestamp ? Math.floor(new Date(bridge.last_timestamp).getTime() / 1000) : 0;
+    // Tool activity must not refresh the age of an earlier context reading.
+    // Older bridges only have last_timestamp, so retain that compatibility path.
+    const contextTimestamp = bridge.context_timestamp ?? bridge.last_timestamp;
+    const lastTs = contextTimestamp ? Math.floor(new Date(contextTimestamp).getTime() / 1000) : 0;
     const isStale = lastTs > 0 && now - lastTs > STALE_SECONDS;
 
     // If bridge is stale, null out context data (still check cost/scope/loop)
