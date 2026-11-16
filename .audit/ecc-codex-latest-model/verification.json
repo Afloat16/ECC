@@ -1,0 +1,34 @@
+{
+  "pr": "https://github.com/affaan-m/ECC/pull/3951",
+  "production": "087686af59d7efa077354c2659e9b823c3ccb029",
+  "base": "d4b97e60dd7d8cdf01962881776a758769c0ba85",
+  "regression_before": {
+    "passed": 12,
+    "failed": 2
+  },
+  "regression_after": {
+    "passed": 14,
+    "failed": 0
+  },
+  "regression_node_versions": [
+    18,
+    20,
+    22
+  ],
+  "full_suite": {
+    "base_files": 488,
+    "candidate_files": 488,
+    "failed_files": 0,
+    "base_reported_assertions": 9991,
+    "candidate_reported_assertions": 9996,
+    "run": 43970310489
+  },
+  "coverage": {
+    "lines": 94.38,
+    "branches": 83.84,
+    "functions": 100
+  },
+  "independent_review": "No findings after source and regression review",
+  "local_limitation": "Local Node 24 full suite had 11 failing hook/install/fixture files. The full passing comparison was on clean Ubuntu / Node 22.",
+  "main_advanced": "8abdf329 updated CI and dependencies without overlapping this patch; test source hashes are recorded explicitly."
+}

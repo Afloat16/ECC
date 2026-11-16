@@ -1,0 +1,36 @@
+{
+  "pr": "https://github.com/affaan-m/ECC/pull/3951",
+  "production": "087686af59d7efa077354c2659e9b823c3ccb029",
+  "logs": [
+    {
+      "label": "baseline",
+      "source_job": 133660427257,
+      "sha256": "17a12d7fae1fe64fa44b0b553798f605edc702384423002f1fead3409c5448e0",
+      "bytes": 2361604,
+      "parts": [
+        ".audit/ecc-codex-latest-model/full-baseline.part-001.log",
+        ".audit/ecc-codex-latest-model/full-baseline.part-002.log",
+        ".audit/ecc-codex-latest-model/full-baseline.part-003.log",
+        ".audit/ecc-codex-latest-model/full-baseline.part-004.log",
+        ".audit/ecc-codex-latest-model/full-baseline.part-005.log",
+        ".audit/ecc-codex-latest-model/full-baseline.part-006.log"
+      ],
+      "join": "Concatenate the UTF-8 part contents in this order, without inserting separators."
+    },
+    {
+      "label": "candidate",
+      "source_job": 133660426406,
+      "sha256": "fb609e2a444f6aa4eb1a7da521ff4da5ad2b23913b57b21a5cc3cdd8207669c0",
+      "bytes": 2372490,
+      "parts": [
+        ".audit/ecc-codex-latest-model/full-candidate.part-001.log",
+        ".audit/ecc-codex-latest-model/full-candidate.part-002.log",
+        ".audit/ecc-codex-latest-model/full-candidate.part-003.log",
+        ".audit/ecc-codex-latest-model/full-candidate.part-004.log",
+        ".audit/ecc-codex-latest-model/full-candidate.part-005.log",
+        ".audit/ecc-codex-latest-model/full-candidate.part-006.log"
+      ],
+      "join": "Concatenate the UTF-8 part contents in this order, without inserting separators."
+    }
+  ]
+}
