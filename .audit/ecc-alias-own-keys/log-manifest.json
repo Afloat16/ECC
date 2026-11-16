@@ -1,0 +1,14 @@
+{
+  "encoding": "utf-8",
+  "join_parts": "Concatenate numbered parts without inserting a separator",
+  "job_id": 133680102953,
+  "char_length": 2368828,
+  "parts": [
+    ".audit/ecc-alias-own-keys/full-candidate-01.log",
+    ".audit/ecc-alias-own-keys/full-candidate-02.log",
+    ".audit/ecc-alias-own-keys/full-candidate-03.log",
+    ".audit/ecc-alias-own-keys/full-candidate-04.log",
+    ".audit/ecc-alias-own-keys/full-candidate-05.log",
+    ".audit/ecc-alias-own-keys/full-candidate-06.log"
+  ]
+}
