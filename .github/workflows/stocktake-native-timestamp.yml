@@ -1,0 +1,64 @@
+name: Stocktake native timestamp regression
+on:
+  push:
+    branches: [validation/ecc-stocktake-native-mtime-20261116]
+permissions:
+  contents: read
+jobs:
+  native:
+    name: Native stocktake (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - name: Identify native tools
+        shell: bash
+        run: |
+          command -v date
+          command -v stat
+          command -v bash
+          command -v jq
+          node --version
+          bash --version
+      - name: Confirm unchanged-source behavior
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, re, subprocess
+          root = pathlib.Path(".")
+          result = subprocess.run(["node", "tests/scripts/skill-stocktake-discovery.test.js"], capture_output=True, text=True)
+          print(result.stdout)
+          print(result.stderr)
+          passed = re.search(r"Passed: (\d+)", result.stdout)
+          failed = re.search(r"Failed: (\d+)", result.stdout)
+          report = {"runner_os": os.environ["RUNNER_OS"], "head": os.environ["GITHUB_SHA"], "exit_code": result.returncode,
+                    "passed": int(passed.group(1)) if passed else None, "failed": int(failed.group(1)) if failed else None,
+                    "source_sha": {p: subprocess.check_output(["git", "hash-object", p], text=True).strip() for p in
+                      ("skills/skill-stocktake/scripts/scan.sh", "skills/skill-stocktake/scripts/quick-diff.sh")}}
+          print("ECC_MTIME_NATIVE_RESULT=" + json.dumps(report))
+          assert passed and failed, "Missing complete test summary"
+          if os.environ["RUNNER_OS"] == "macOS":
+              assert result.returncode != 0, "Expected native BSD date regression before fixing code"
+              assert "stocktake preserves UTC file mtimes" in result.stdout, "New regression was not executed"
+          else:
+              assert result.returncode == 0, "Linux control must remain green"
+          PY
+  history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Audit every fork branch and upstream pull request history
+        run: python3 .audit/ecc-stocktake-mtime/history.py

@@ -392,6 +392,63 @@ if (process.platform !== 'win32') {
   });
 }
 
+
+if (process.platform !== 'win32') {
+  test('stocktake preserves UTC file mtimes across scans and quick comparisons', () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-stocktake-native-mtime-'));
+    try {
+      const skills = path.join(tempRoot, '.claude', 'skills');
+      const names = ['plain', 'space skill', 'newline\nskill', '-leading-dash', 'linked-file'];
+      const expected = '2025-02-03T04:05:06Z';
+      const timestamp = new Date('2025-02-03T04:05:06.789Z');
+      for (const [index, name] of names.entries()) {
+        const skillDir = path.join(skills, name);
+        writeSkill(skillDir, 'mtime-' + index);
+        const skillPath = path.join(skillDir, 'SKILL.md');
+        if (name === 'linked-file') {
+          const target = path.join(tempRoot, 'linked-target.md');
+          fs.renameSync(skillPath, target);
+          fs.utimesSync(target, timestamp, timestamp);
+          fs.symlinkSync(target, skillPath);
+        } else {
+          fs.utimesSync(skillPath, timestamp, timestamp);
+        }
+      }
+      const env = {
+        TZ: 'Pacific/Honolulu',
+        SKILL_STOCKTAKE_GLOBAL_DIR: path.join(tempRoot, 'missing-global'),
+        SKILL_STOCKTAKE_PROJECT_DIR: skills,
+        SKILL_STOCKTAKE_OBSERVATIONS: path.join(tempRoot, 'missing-observations'),
+      };
+      const scan = runBash(scanScript, [], env);
+      assert.strictEqual(scan.status, 0, scan.stderr);
+      const inventory = JSON.parse(scan.stdout).skills;
+      assert.strictEqual(inventory.length, names.length);
+      for (const skill of inventory) assert.strictEqual(skill.mtime, expected, skill.path);
+      const resultsPath = path.join(tempRoot, 'results.json');
+      fs.writeFileSync(resultsPath, JSON.stringify({
+        evaluated_at: '2025-02-04T00:00:00Z',
+        skills: inventory.map(skill => ({ path: skill.path, mtime: expected })),
+      }));
+      const unchanged = runBash(quickDiffScript, [resultsPath], env);
+      assert.strictEqual(unchanged.status, 0, unchanged.stderr);
+      assert.deepStrictEqual(JSON.parse(unchanged.stdout), []);
+      const target = path.join(tempRoot, 'linked-target.md');
+      const changedAt = new Date('2025-02-05T06:07:08.123Z');
+      fs.utimesSync(target, changedAt, changedAt);
+      const changed = runBash(quickDiffScript, [resultsPath], env);
+      assert.strictEqual(changed.status, 0, changed.stderr);
+      assert.deepStrictEqual(JSON.parse(changed.stdout), [{
+        path: path.join(skills, 'linked-file', 'SKILL.md'),
+        mtime: '2025-02-05T06:07:08Z',
+        is_new: false,
+      }]);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+}
+
 console.log(`\nPassed: ${passed}`);
 console.log(`Failed: ${failed}`);
 process.exit(failed > 0 ? 1 : 0);
