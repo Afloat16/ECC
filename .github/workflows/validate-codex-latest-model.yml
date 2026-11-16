@@ -7,7 +7,7 @@ permissions:
 jobs:
   regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -19,29 +19,52 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: ${{ matrix.node }}
-      - name: Confirm baseline model-switch failures
-        run: |
-          node - <<'JS'
-          const { spawnSync } = require('child_process');
-          const assert = require('assert');
-          const r = spawnSync(process.execPath, ['tests/lib/session-adapters-codex.test.js'], { encoding: 'utf8' });
-          process.stdout.write(r.stdout);
-          process.stderr.write(r.stderr);
-          const match = r.stdout.match(/=== Results: (\d+) passed, (\d+) failed ===/);
-          assert.ok(match, 'Complete test summary required');
-          const report = { version: process.version, status: r.status, passed: Number(match[1]), failed: Number(match[2]) };
-          console.log('ECC_CODEX_MODEL_BASELINE=' + JSON.stringify(report));
-          assert.strictEqual(r.status, 1);
-          assert.strictEqual(report.failed, 2);
-          assert.strictEqual(report.passed, 12);
-          JS
-  history:
+      - name: Verify all model regression cases
+        run: node tests/lib/session-adapters-codex.test.js
+  full:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { label: baseline, ref: d4b97e60dd7d8cdf01962881776a758769c0ba85 }
+          - { label: candidate, ref: 087686af59d7efa077354c2659e9b823c3ccb029 }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ matrix.ref }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Audit all fork branches and upstream pull request history
-        run: python3 .audit/ecc-codex-latest-model/history.py
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - name: Check exact source and ripgrep
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ matrix.ref }}"
+          rg --version
+          printf 'ecc-pcre2-probe\n' | rg --pcre2 -- '^ecc-pcre2-probe$'
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run full required validation and JavaScript suite
+        env:
+          ECC_TEST_JOBS: '4'
+          CLAUDE_CODE_PACKAGE_MANAGER: npm
+          ECC_TEST_REPORT: ${{ runner.temp }}/ecc-test-execution.json
+        run: |
+          set -o pipefail
+          ECC_TEST_SERIAL=$(rg -l --glob '*.test.js' 'build-opencode|\.backup-|dist\.backup|time budget' tests | sed 's#^tests/##' | sort | paste -sd, -)
+          export ECC_TEST_SERIAL
+          npm test 2>&1 | tee "${{ runner.temp }}/ecc-full-test.log"
+      - name: Publish actual suite execution report
+        if: always()
+        run: |
+          if test -f "${{ runner.temp }}/ecc-test-execution.json"; then
+            cat "${{ runner.temp }}/ecc-test-execution.json"
+          fi
+      - name: Check changed-source lint and coverage
+        if: matrix.label == 'candidate'
+        run: |
+          ./node_modules/.bin/eslint scripts/lib/session-adapters/codex-worktree.js tests/lib/session-adapters-codex.test.js
+          ./node_modules/.bin/c8 --all --include=scripts/lib/session-adapters/codex-worktree.js --check-coverage --lines 80 --functions 80 --branches 80 --statements 80 --reporter=text --reporter=json-summary node tests/run-all.js session-adapters
+          cat coverage/coverage-summary.json
