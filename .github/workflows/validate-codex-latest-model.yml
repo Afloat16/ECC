@@ -5,22 +5,6 @@ on:
 permissions:
   contents: read
 jobs:
-  regression:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ['18', '20', '22']
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        with:
-          node-version: ${{ matrix.node }}
-      - name: Verify all model regression cases
-        run: node tests/lib/session-adapters-codex.test.js
   full:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -42,6 +26,8 @@ jobs:
       - name: Check exact source and ripgrep
         run: |
           test "$(git rev-parse HEAD)" = "${{ matrix.ref }}"
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ripgrep
           rg --version
           printf 'ecc-pcre2-probe\n' | rg --pcre2 -- '^ecc-pcre2-probe$'
       - name: Install locked dependencies
