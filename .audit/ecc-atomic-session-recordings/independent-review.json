@@ -1,0 +1,17 @@
+{
+  "scope": "independent source and real filesystem fault-test review",
+  "findings_resolved": [
+    {
+      "finding": "Atomic helper default 0600 changed existing and creation permissions",
+      "resolution": "Opt-in preservation of existing user/group/other permission bits and 0666 creation mode subject to umask"
+    },
+    {
+      "finding": "Special permission bits should not be restored for JSON recordings",
+      "resolution": "Only 0777 permission bits are retained"
+    }
+  ],
+  "limits": [
+    "Atomic publication is not a multi-writer lock; concurrent writers can still overwrite each other's history.",
+    "Existing final read-error handling is unchanged; bounded Windows sharing retry does not guarantee recovery from a permanent lock."
+  ]
+}

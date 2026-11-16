@@ -1,0 +1,81 @@
+name: Validate atomic session recordings
+on:
+  push:
+    branches: [validation/ecc-atomic-session-recordings-20261116]
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, node: '18' }
+          - { os: ubuntu-latest, node: '20' }
+          - { os: ubuntu-latest, node: '22' }
+          - { os: windows-latest, node: '22' }
+          - { os: macos-latest, node: '22' }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Observe original failures and exact candidate recovery
+        shell: bash
+        run: node .audit/ecc-atomic-session-recordings/verify-regression.js
+  full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { label: baseline, ref: 8abdf329ecbc9315dc4e3334a5702782f70b8b02 }
+          - { label: candidate, ref: 0083c6e8ec334e3875e621540ce62420f7a999d0 }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ matrix.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - name: Check exact source and install ripgrep
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ matrix.ref }}"
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ripgrep
+          rg --version
+          printf 'ecc-pcre2-probe\n' | rg --pcre2 -- '^ecc-pcre2-probe$'
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run full validation and JavaScript suite
+        env:
+          ECC_TEST_JOBS: '4'
+          CLAUDE_CODE_PACKAGE_MANAGER: npm
+          ECC_TEST_REPORT: ${{ runner.temp }}/ecc-test-execution.json
+        run: |
+          set -o pipefail
+          ECC_TEST_SERIAL=$(rg -l --glob '*.test.js' 'build-opencode|\.backup-|dist\.backup|time budget' tests | sed 's#^tests/##' | sort | paste -sd, -)
+          export ECC_TEST_SERIAL
+          npm test 2>&1 | tee "${{ runner.temp }}/ecc-full-test.log"
+      - name: Publish suite execution report
+        if: always()
+        run: |
+          if test -f "${{ runner.temp }}/ecc-test-execution.json"; then
+            cat "${{ runner.temp }}/ecc-test-execution.json"
+          fi
+      - name: Check changed-source lint and coverage
+        if: matrix.label == 'candidate'
+        env:
+          ECC_TEST_ONLY: lib/session-adapters-codex.test.js,lib/session-adapters-opencode.test.js,lib/session-adapters.test.js,lib/session-recording-atomic.test.js,scripts/session-inspect.test.js,lib/atomic-write.test.js
+        run: |
+          ./node_modules/.bin/eslint scripts/lib/atomic-write.js scripts/lib/session-adapters/canonical-session.js tests/lib/session-recording-atomic.test.js
+          ./node_modules/.bin/c8 --all --include=scripts/lib/session-adapters/canonical-session.js --include=scripts/lib/atomic-write.js --check-coverage --lines 80 --functions 80 --branches 80 --statements 80 --reporter=text --reporter=json-summary node tests/run-all.js
+          cat coverage/coverage-summary.json
