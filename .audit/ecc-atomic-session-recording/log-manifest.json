@@ -1,0 +1,32 @@
+{
+  "encoding": "utf-8",
+  "join_parts": "Concatenate numbered parts without inserting a separator",
+  "logs": [
+    {
+      "label": "baseline",
+      "job_id": 133669999258,
+      "char_length": 2340758,
+      "parts": [
+        ".audit/ecc-atomic-session-recording/baseline-01.log",
+        ".audit/ecc-atomic-session-recording/baseline-02.log",
+        ".audit/ecc-atomic-session-recording/baseline-03.log",
+        ".audit/ecc-atomic-session-recording/baseline-04.log",
+        ".audit/ecc-atomic-session-recording/baseline-05.log",
+        ".audit/ecc-atomic-session-recording/baseline-06.log"
+      ]
+    },
+    {
+      "label": "candidate",
+      "job_id": 133669999470,
+      "char_length": 2357291,
+      "parts": [
+        ".audit/ecc-atomic-session-recording/candidate-01.log",
+        ".audit/ecc-atomic-session-recording/candidate-02.log",
+        ".audit/ecc-atomic-session-recording/candidate-03.log",
+        ".audit/ecc-atomic-session-recording/candidate-04.log",
+        ".audit/ecc-atomic-session-recording/candidate-05.log",
+        ".audit/ecc-atomic-session-recording/candidate-06.log"
+      ]
+    }
+  ]
+}
