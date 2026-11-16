@@ -27,6 +27,19 @@
         ".audit/ecc-atomic-session-recording/candidate-05.log",
         ".audit/ecc-atomic-session-recording/candidate-06.log"
       ]
+    },
+    {
+      "label": "final-candidate",
+      "job_id": 133681320140,
+      "char_length": 2358491,
+      "parts": [
+        ".audit/ecc-atomic-session-recording/final-candidate-01.log",
+        ".audit/ecc-atomic-session-recording/final-candidate-02.log",
+        ".audit/ecc-atomic-session-recording/final-candidate-03.log",
+        ".audit/ecc-atomic-session-recording/final-candidate-04.log",
+        ".audit/ecc-atomic-session-recording/final-candidate-05.log",
+        ".audit/ecc-atomic-session-recording/final-candidate-06.log"
+      ]
     }
   ]
 }
