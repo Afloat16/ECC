@@ -206,6 +206,12 @@ function isContextWindowInferred(tokens, model) {
   return resolveContextWindow(tokens, model).inferred;
 }
 
+function parseTokenSetting(raw) {
+  const value = String(raw ?? '').trim();
+  // A fractional or suffixed value must not become zero or a tiny token count.
+  return /^[+-]?\d+$/.test(value) ? Number(value) : Number.NaN;
+}
+
 /**
  * Resolve the context-size suggestion threshold (tokens).
  * `COMPACT_CONTEXT_THRESHOLD=0` disables the context signal entirely;
@@ -215,7 +221,7 @@ function isContextWindowInferred(tokens, model) {
 function resolveContextThreshold(env, windowTokens) {
   const raw = env && env.COMPACT_CONTEXT_THRESHOLD;
   if (raw !== undefined && raw !== null && raw !== '') {
-    const parsed = Number.parseInt(raw, 10);
+    const parsed = parseTokenSetting(raw);
     if (parsed === 0) {
       return 0;
     }
@@ -239,7 +245,7 @@ function resolveContextThreshold(env, windowTokens) {
  */
 function resolveContextInterval(env) {
   const raw = env && env.COMPACT_CONTEXT_INTERVAL;
-  const parsed = Number.parseInt(raw, 10);
+  const parsed = parseTokenSetting(raw);
   return Number.isInteger(parsed) && parsed > 0 && parsed <= MAX_TOKEN_SETTING ? parsed : DEFAULT_CONTEXT_INTERVAL_TOKENS;
 }
 
