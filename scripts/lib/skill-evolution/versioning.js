@@ -66,8 +66,11 @@ function ensureSkillVersioning(skillPath) {
 
   for (const logType of EVOLUTION_LOG_TYPES) {
     const logPath = getEvolutionLogPath(skillPath, logType);
-    if (!fs.existsSync(logPath)) {
-      fs.writeFileSync(logPath, '', 'utf8');
+    try {
+      // Another process may already have initialized and appended history.
+      fs.writeFileSync(logPath, '', { encoding: 'utf8', flag: 'wx' });
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
     }
   }
 

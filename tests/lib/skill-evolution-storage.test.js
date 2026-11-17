@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const versioning = require('../../scripts/lib/skill-evolution/versioning');
 const health = require('../../scripts/lib/skill-evolution/health');
 
@@ -417,6 +418,55 @@ test('successful rollback snapshots restored content and retains earlier targets
   assert.equal(fs.readFileSync(second.path, 'utf8'), '# Second version\n');
   assert.equal(fs.readFileSync(second.path, 'utf8'), fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8'));
   assert.equal(versioning.getCurrentVersion(skillDir), 4);
+});
+
+for (const logType of versioning.EVOLUTION_LOG_TYPES) {
+  test(`initializing ${logType} preserves a record created by another process`, ({ skillDir }) => {
+    const logPath = versioning.getEvolutionLogPath(skillDir, logType);
+    const writeFile = fs.writeFileSync;
+    let raced = false;
+    fs.writeFileSync = (file, ...args) => {
+      if (!raced && file === logPath && args[0] === '') {
+        raced = true;
+        const result = spawnSync(process.execPath, ['-e', `
+          const versioning = require(process.argv[1]);
+          versioning.appendEvolutionRecord(process.argv[2], process.argv[3], { event: 'other-process' });
+        `, require.resolve('../../scripts/lib/skill-evolution/versioning'), skillDir, logType], {
+          encoding: 'utf8', timeout: 5000,
+        });
+        assert.equal(result.status, 0, result.stderr);
+      }
+      return writeFile(file, ...args);
+    };
+    try {
+      versioning.appendEvolutionRecord(skillDir, logType, { event: 'current-process' });
+    } finally {
+      fs.writeFileSync = writeFile;
+    }
+    assert.equal(raced, true);
+    assert.deepEqual(versioning.getEvolutionLog(skillDir, logType), [
+      { event: 'other-process' }, { event: 'current-process' },
+    ]);
+  });
+}
+
+test('log initialization propagates non-collision errors and allows a later retry', ({ skillDir }) => {
+  const logPath = versioning.getEvolutionLogPath(skillDir, 'inspections');
+  const writeFile = fs.writeFileSync;
+  const failure = Object.assign(new Error('injected log creation failure'), { code: 'EACCES' });
+  fs.writeFileSync = (file, ...args) => {
+    if (file === logPath) throw failure;
+    return writeFile(file, ...args);
+  };
+  try {
+    assert.throws(() => versioning.appendEvolutionRecord(skillDir, 'inspections', { event: 'failed' }), error => error === failure);
+  } finally {
+    fs.writeFileSync = writeFile;
+  }
+  assert.equal(fs.existsSync(logPath), false);
+  versioning.appendEvolutionRecord(skillDir, 'inspections', { event: 'retry' });
+  versioning.ensureSkillVersioning(skillDir);
+  assert.deepEqual(versioning.getEvolutionLog(skillDir, 'inspections'), [{ event: 'retry' }]);
 });
 
 console.log(`Results: Passed: ${passed}, Failed: ${failed}`);
