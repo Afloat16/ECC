@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { StringDecoder } = require('string_decoder');
 
 const { normalizeCodexWorktreeSession, persistCanonicalSnapshot } = require('./canonical-session');
 
@@ -134,24 +135,47 @@ function resolveRolloutPath(target, cwd, options, context) {
   throw new Error(`Unsupported Codex session target: ${target}`);
 }
 
-function readJsonLines(filePath) {
-  const raw = fs.readFileSync(filePath, 'utf8');
-  const records = [];
-
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (trimmed.length === 0) {
-      continue;
+function* readLines(filePath) {
+  const descriptor = fs.openSync(filePath, 'r');
+  try {
+    // Snapshot the size so a continuously appended rollout cannot keep a
+    // control-pane refresh running indefinitely. Only retain the current line.
+    let remaining = fs.fstatSync(descriptor).size;
+    const buffer = Buffer.alloc(64 * 1024);
+    const decoder = new StringDecoder('utf8');
+    let pending = '';
+    while (remaining > 0) {
+      const count = fs.readSync(descriptor, buffer, 0, Math.min(buffer.length, remaining), null);
+      if (count === 0) break;
+      remaining -= count;
+      pending += decoder.write(buffer.subarray(0, count));
+      let start = 0;
+      let end;
+      while ((end = pending.indexOf('\n', start)) !== -1) {
+        yield pending.slice(start, end);
+        start = end + 1;
+      }
+      pending = pending.slice(start);
     }
+    yield pending + decoder.end();
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
 
+function* readJsonLines(filePath) {
+  for (const line of readLines(filePath)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let record;
     try {
-      records.push(JSON.parse(trimmed));
+      record = JSON.parse(trimmed);
     } catch {
       // Rollout logs are append-only; skip partial/corrupt trailing lines.
+      continue;
     }
+    yield record;
   }
-
-  return records;
 }
 
 function extractText(content) {
@@ -184,22 +208,13 @@ function isPreambleText(text) {
     || text.includes('AGENTS.md instructions');
 }
 
-function deriveObjective(records) {
-  for (const record of records) {
-    const payload = record && record.payload;
-    if (!payload || payload.type !== 'message' || payload.role !== 'user') {
-      continue;
-    }
+function deriveObjective(record) {
+  const payload = record && record.payload;
+  if (!payload || payload.type !== 'message' || payload.role !== 'user') return '';
 
-    const text = stripLeadingMessageId(extractText(payload.content).trim());
-    if (text.length === 0 || isPreambleText(text)) {
-      continue;
-    }
-
-    return text.length > 280 ? `${text.slice(0, 277)}...` : text;
-  }
-
-  return '';
+  const text = stripLeadingMessageId(extractText(payload.content).trim());
+  if (text.length === 0 || isPreambleText(text)) return '';
+  return text.length > 280 ? `${text.slice(0, 277)}...` : text;
 }
 
 function recordTimestampMs(record) {
@@ -212,14 +227,7 @@ function recordTimestampMs(record) {
   return Number.isNaN(ms) ? null : ms;
 }
 
-function deriveLastActivityMs(records, fallbackPath) {
-  for (let index = records.length - 1; index >= 0; index -= 1) {
-    const ms = recordTimestampMs(records[index]);
-    if (ms !== null) {
-      return ms;
-    }
-  }
-
+function fileModifiedMs(fallbackPath) {
   try {
     return fs.statSync(fallbackPath).mtimeMs;
   } catch {
@@ -227,16 +235,7 @@ function deriveLastActivityMs(records, fallbackPath) {
   }
 }
 
-function deriveModel(meta, records) {
-  for (let index = records.length - 1; index >= 0; index -= 1) {
-    const record = records[index];
-    if (record && record.type === 'turn_context' && record.payload) {
-      if (typeof record.payload.model === 'string' && record.payload.model.length > 0) {
-        return record.payload.model;
-      }
-    }
-  }
-
+function metadataModel(meta) {
   if (meta && typeof meta.model === 'string' && meta.model.length > 0) {
     return meta.model;
   }
@@ -276,13 +275,29 @@ function resolveGitBranch(cwd, resolveBranchImpl) {
   }
 }
 
-function parseCodexRollout(rolloutPath, options = {}) {
-  const records = readJsonLines(rolloutPath);
-  const metaRecord = records.find(record => record && record.type === 'session_meta');
-  const meta = (metaRecord && metaRecord.payload) || {};
+function summarizeRollout(rolloutPath) {
+  let meta;
+  let objective = '';
+  let model = null;
+  let lastActivityMs = null;
+  let recordCount = 0;
+  for (const record of readJsonLines(rolloutPath)) {
+    recordCount += 1;
+    if (meta === undefined && record && record.type === 'session_meta') meta = record.payload || {};
+    if (!objective) objective = deriveObjective(record);
+    lastActivityMs = recordTimestampMs(record) ?? lastActivityMs;
+    if (record && record.type === 'turn_context' && record.payload
+      && typeof record.payload.model === 'string' && record.payload.model.length > 0) {
+      model = record.payload.model;
+    }
+  }
+  return { meta: meta || {}, objective, model, lastActivityMs, recordCount };
+}
 
+function parseCodexRollout(rolloutPath, options = {}) {
+  const { meta, objective, model, lastActivityMs: recordedActivityMs, recordCount } = summarizeRollout(rolloutPath);
+  const lastActivityMs = recordedActivityMs ?? fileModifiedMs(rolloutPath);
   const cwd = typeof meta.cwd === 'string' && meta.cwd.length > 0 ? meta.cwd : null;
-  const lastActivityMs = deriveLastActivityMs(records, rolloutPath);
   const isRecent = lastActivityMs !== null && (Date.now() - lastActivityMs) <= RECENT_ACTIVITY_THRESHOLD_MS;
 
   return {
@@ -292,12 +307,12 @@ function parseCodexRollout(rolloutPath, options = {}) {
     sessionPath: rolloutPath,
     cwd,
     branch: resolveGitBranch(cwd, options.resolveBranchImpl),
-    objective: deriveObjective(records),
-    model: deriveModel(meta, records),
+    objective,
+    model: model || metadataModel(meta),
     originator: typeof meta.originator === 'string' ? meta.originator : null,
     cliVersion: typeof meta.cli_version === 'string' ? meta.cli_version : null,
     startedAt: typeof meta.timestamp === 'string' ? meta.timestamp : null,
-    recordCount: records.length,
+    recordCount,
     active: isRecent
   };
 }

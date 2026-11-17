@@ -4,6 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const {
   createCodexWorktreeAdapter,
@@ -268,6 +269,139 @@ for (const [metadata, expected] of [
     }
   });
 }
+
+test('large rollouts do not retain the entire transcript while computing a snapshot', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-codex-large-'));
+  try {
+    const rolloutPath = path.join(dir, 'rollout-large.jsonl');
+    const descriptor = fs.openSync(rolloutPath, 'w');
+    try {
+      fs.writeSync(descriptor, JSON.stringify({ type: 'session_meta', payload: { id: 'large' } }) + '\n');
+      const output = JSON.stringify({ type: 'response_item', payload: { type: 'function_call_output', output: 'x'.repeat(64 * 1024) } }) + '\n';
+      for (let index = 0; index < 512; index += 1) fs.writeSync(descriptor, output);
+      fs.writeSync(descriptor, JSON.stringify({ type: 'turn_context', payload: { model: 'tail-model' } }) + '\n');
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    const script = `
+      const { parseCodexRollout } = require(process.argv[1]);
+      global.gc();
+      const initialHeap = process.memoryUsage().heapUsed;
+      let peakHeap = initialHeap;
+      const parse = JSON.parse;
+      JSON.parse = (...args) => {
+        const value = parse(...args);
+        peakHeap = Math.max(peakHeap, process.memoryUsage().heapUsed);
+        return value;
+      };
+      const snapshot = parseCodexRollout(process.argv[2]);
+      process.stdout.write(JSON.stringify({ snapshot, peakGrowth: peakHeap - initialHeap }));
+    `;
+    const result = spawnSync(process.execPath, ['--expose-gc', '-e', script,
+      require.resolve('../../scripts/lib/session-adapters/codex-worktree'), rolloutPath], {
+      encoding: 'utf8', timeout: 20000,
+    });
+    assert.strictEqual(result.status, 0, result.stderr);
+    const { snapshot, peakGrowth } = JSON.parse(result.stdout);
+    assert.strictEqual(snapshot.sessionId, 'large');
+    assert.strictEqual(snapshot.recordCount, 514);
+    assert.strictEqual(snapshot.model, 'tail-model');
+    console.log(`    32 MiB rollout peak JS heap growth: ${peakGrowth} bytes`);
+    assert.ok(peakGrowth < 24 * 1024 * 1024, `32 MiB rollout grew the JS heap by ${peakGrowth} bytes`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('chunk boundaries preserve UTF-8, large records, trailing JSON and summary precedence', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-codex-chunks-'));
+  try {
+    const rolloutPath = path.join(dir, 'rollout-chunks.jsonl');
+    const prefix = ' '.repeat(64 * 1024 - 2);
+    const records = [
+      { type: 'session_meta', payload: { id: 'first-meta', model: 'fallback-model' } },
+      { type: 'session_meta', payload: { id: 'ignored-meta' } },
+      { type: 'response_item', payload: { type: 'message', role: 'user', content: '首个目标\u{1f642}' } },
+      { type: 'response_item', payload: { type: 'message', role: 'user', content: 'ignored objective' } },
+      { type: 'response_item', payload: { output: '大'.repeat(64 * 1024) } },
+      { type: 'turn_context', timestamp: new Date().toISOString(), payload: { model: 'latest-model' } },
+      null,
+    ];
+    fs.writeFileSync(rolloutPath, prefix + '"\u{1f642}"\r\n' + records.map(JSON.stringify).join('\r\n'));
+    const snapshot = parseCodexRollout(rolloutPath);
+    assert.strictEqual(snapshot.sessionId, 'first-meta');
+    assert.strictEqual(snapshot.objective, '首个目标\u{1f642}');
+    assert.strictEqual(snapshot.model, 'latest-model');
+    assert.strictEqual(snapshot.recordCount, 8);
+    assert.strictEqual(snapshot.active, true);
+    fs.appendFileSync(rolloutPath, '\n{"type":');
+    assert.deepStrictEqual(parseCodexRollout(rolloutPath), snapshot);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('rollout records retain BOM and Unicode whitespace compatibility', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-codex-bom-'));
+  try {
+    const rolloutPath = path.join(dir, 'rollout-bom.jsonl');
+    fs.writeFileSync(rolloutPath, '\ufeff' + JSON.stringify({ type: 'session_meta', payload: { id: 'bom-session' } })
+      + '\n\u00a0' + JSON.stringify({ type: 'response_item', payload: { type: 'message', role: 'user', content: 'preserved objective' } })
+      + '\u2003\n\ufeff' + JSON.stringify({ type: 'turn_context', payload: { model: 'unicode-model' } }) + '\u00a0');
+    const snapshot = parseCodexRollout(rolloutPath);
+    assert.strictEqual(snapshot.sessionId, 'bom-session');
+    assert.strictEqual(snapshot.objective, 'preserved objective');
+    assert.strictEqual(snapshot.model, 'unicode-model');
+    assert.strictEqual(snapshot.recordCount, 3);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('rollout scans finish at the original size even with short reads and concurrent appends', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-codex-short-read-'));
+  const originalRead = fs.readSync;
+  try {
+    const rolloutPath = writeRollout(dir, 'rollout-short.jsonl', [
+      { type: 'session_meta', payload: { id: 'short-read' } },
+      { type: 'turn_context', payload: { model: 'initial-model' } },
+    ]);
+    let appended = false;
+    fs.readSync = (descriptor, buffer, offset, length, position) => {
+      if (!appended) {
+        appended = true;
+        fs.appendFileSync(rolloutPath, JSON.stringify({ type: 'turn_context', payload: { model: 'appended-model' } }) + '\n');
+      }
+      return originalRead(descriptor, buffer, offset, Math.min(length, 7), position);
+    };
+    const snapshot = parseCodexRollout(rolloutPath);
+    assert.strictEqual(snapshot.recordCount, 2);
+    assert.strictEqual(snapshot.model, 'initial-model');
+    fs.readSync = originalRead;
+    assert.strictEqual(parseCodexRollout(rolloutPath).model, 'appended-model');
+  } finally {
+    fs.readSync = originalRead;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('rollout scans close their file descriptor after a read error', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-codex-read-error-'));
+  const originalRead = fs.readSync;
+  try {
+    const rolloutPath = writeRollout(dir, 'rollout-error.jsonl', [{ type: 'session_meta', payload: { id: 'read-error' } }]);
+    let descriptor;
+    fs.readSync = fd => {
+      descriptor = fd;
+      throw new Error('injected read failure');
+    };
+    assert.throws(() => parseCodexRollout(rolloutPath), /injected read failure/);
+    assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+  } finally {
+    fs.readSync = originalRead;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
