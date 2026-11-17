@@ -139,7 +139,26 @@ function buildRetrievalIndex(entries) {
   return { documents, documentFrequency, averageLength: averageLength || 1, idf, entryCount: documents.length };
 }
 
-/** Rank entries for a free-text query. Returns candidates sorted by fused score. */
+// A short name may match only inside another skill's full name. Retain equal
+// spans as independent anchors so shared aliases remain ambiguous.
+function independentNameAnchors(exactAnchors, normalizedQuery) {
+  // Lookahead includes overlapping occurrences of a repeated multiword alias.
+  const mentions = exactAnchors.flatMap(({ document }) => document.aliases.filter(Boolean).flatMap(alias =>
+    [...normalizedQuery.matchAll(new RegExp('(?=\\b' + alias + '\\b)', 'g'))]
+      .map(match => ({ document, start: match.index, end: match.index + alias.length }))))
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+  const independentAnchors = new Set();
+  let coveringMention = null;
+  for (const mention of mentions) {
+    if (!coveringMention || mention.end > coveringMention.end) coveringMention = mention;
+    if (mention.start === coveringMention.start && mention.end === coveringMention.end) {
+      independentAnchors.add(mention.document);
+    }
+  }
+  return independentAnchors;
+}
+
+/** Rank entries for a free-text query, preferring complete exact names before fused scores. */
 function searchRetrieval(index, query, { limit = 5 } = {}) {
   const queryTokens = tokenize(query || '');
   const normalizedQuery = ` ${normalizedName(query || '')} `;
@@ -186,11 +205,14 @@ function searchRetrieval(index, query, { limit = 5 } = {}) {
     alias: document.aliases.filter(alias => alias && normalizedQuery.includes(` ${alias} `))
       .sort((a, b) => b.length - a.length)[0] || null }))
     .filter(anchor => anchor.alias);
+  // Keep every exact flag and score; selection still applies its existing guards.
+  const independentAnchors = independentNameAnchors(exactAnchors, normalizedQuery);
   for (const { document } of exactAnchors) fused.set(document, (fused.get(document) || 0) + 1);
   if (!fused.size) return [];
   const anchored = new Map(exactAnchors.map(anchor => [anchor.document, anchor.alias]));
   return [...fused.entries()]
-    .sort((a, b) => b[1] - a[1] || (a[0].entry.id < b[0].entry.id ? -1 : 1))
+    .sort((a, b) => Number(independentAnchors.has(b[0])) - Number(independentAnchors.has(a[0]))
+      || b[1] - a[1] || (a[0].entry.id < b[0].entry.id ? -1 : 1))
     .slice(0, limit)
     .map(([document, score]) => {
       const matched = [...new Set(queryTokens)].filter(term => document.weighted.has(term));
