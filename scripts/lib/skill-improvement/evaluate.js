@@ -14,7 +14,7 @@ function summarize(records) {
     runs,
     successes,
     failures,
-    successRate: runs > 0 ? roundRate(successes / runs) : 0
+    successRate: runs > 0 ? successes / runs : 0
   };
 }
 
@@ -28,14 +28,15 @@ function buildSkillEvaluationScaffold(skillId, records, options = {}) {
 
   const baselineSummary = summarize(baseline);
   const amendedSummary = summarize(amended);
+  const successRateDelta = amendedSummary.successRate - baselineSummary.successRate;
   const delta = {
-    successRate: roundRate(amendedSummary.successRate - baselineSummary.successRate),
+    successRate: roundRate(successRateDelta),
     failures: amendedSummary.failures - baselineSummary.failures
   };
 
   let recommendation = 'insufficient-data';
   if (baselineSummary.runs >= minimumRunsPerVariant && amendedSummary.runs >= minimumRunsPerVariant) {
-    recommendation = delta.successRate > 0 ? 'promote-amendment' : 'keep-baseline';
+    recommendation = successRateDelta > 0 ? 'promote-amendment' : 'keep-baseline';
   }
 
   return {
@@ -46,8 +47,9 @@ function buildSkillEvaluationScaffold(skillId, records, options = {}) {
     gate: {
       minimumRunsPerVariant
     },
-    baseline: baselineSummary,
-    amended: amendedSummary,
+    // Rounding is for presentation only; comparisons use the observed rates.
+    baseline: { ...baselineSummary, successRate: roundRate(baselineSummary.successRate) },
+    amended: { ...amendedSummary, successRate: roundRate(amendedSummary.successRate) },
     delta,
     recommendation
   };
