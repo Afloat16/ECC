@@ -537,6 +537,7 @@ function runStdioServer({
 } = {}) {
   const service = createMemoryMcpService(serviceOptions);
   let pending = Buffer.alloc(0);
+  let pendingBytes = 0;
   let discardingOversizedLine = false;
   const queue = [];
   let queuedBytes = 0;
@@ -618,17 +619,26 @@ function runStdioServer({
 
       if (discardingOversizedLine) {
         if (newlineIndex >= 0) discardingOversizedLine = false;
-      } else if (pending.length + segment.length > MAX_MESSAGE_BYTES) {
+      } else if (pendingBytes + segment.length > MAX_MESSAGE_BYTES) {
         pending = Buffer.alloc(0);
+        pendingBytes = 0;
         reportOversizedLine();
         discardingOversizedLine = newlineIndex < 0;
       } else {
-        pending = pending.length === 0
-          ? Buffer.from(segment)
-          : Buffer.concat([pending, segment]);
+        const requiredBytes = pendingBytes + segment.length;
+        if (requiredBytes > pending.length) {
+          // Geometric growth avoids copying the full prefix for every fragment.
+          const capacity = Math.min(MAX_MESSAGE_BYTES, Math.max(requiredBytes, pending.length * 2));
+          const grown = Buffer.allocUnsafe(capacity);
+          pending.copy(grown, 0, 0, pendingBytes);
+          pending = grown;
+        }
+        segment.copy(pending, pendingBytes);
+        pendingBytes = requiredBytes;
         if (newlineIndex >= 0) {
-          processLine(pending);
+          processLine(pending.subarray(0, pendingBytes));
           pending = Buffer.alloc(0);
+          pendingBytes = 0;
         }
       }
 
@@ -639,7 +649,7 @@ function runStdioServer({
   });
 
   input.on('end', () => {
-    if (pending.length > 0) processLine(pending);
+    if (pendingBytes > 0) processLine(pending.subarray(0, pendingBytes));
   });
 
   input.on('error', () => {
