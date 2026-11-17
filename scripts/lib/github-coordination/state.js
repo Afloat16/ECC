@@ -108,16 +108,19 @@ function desiredLabelsForState(state, policy = DEFAULT_POLICY) {
   return Array.from(new Set(labels.filter(Boolean))).sort();
 }
 
+function staleCoordinationLabels(issue, nextLabels, policy = DEFAULT_POLICY) {
+  const managed = new Set(Object.values(policy.labels || DEFAULT_POLICY.labels));
+  const desired = new Set(nextLabels);
+  return normalizeLabels(issue.labels).filter(label =>
+    (label.startsWith('coordination:') || managed.has(label)) && !desired.has(label)
+  );
+}
+
 function syncIssueLabels(repo, issue, state, policy = DEFAULT_POLICY, options = {}) {
   const desired = new Set(desiredLabelsForState(state, policy));
   const current = new Set(normalizeLabels(issue.labels));
   const addLabels = Array.from(desired).filter(label => !current.has(label));
-  const removeLabels = Array.from(current).filter(label => {
-    if (!label.startsWith('coordination:') && label !== (policy.labels && policy.labels.epic)) {
-      return false;
-    }
-    return !desired.has(label);
-  });
+  const removeLabels = staleCoordinationLabels(issue, desired, policy);
 
   if (options.dryRun || (addLabels.length === 0 && removeLabels.length === 0)) {
     return { addLabels, removeLabels };
@@ -245,6 +248,7 @@ module.exports = {
   getCoordinationState,
   mapStateToWorkItemStatus,
   slugifySegment,
+  staleCoordinationLabels,
   summarizeProjectProjection,
   summarizeStateForOutput,
   syncIssueLabels,

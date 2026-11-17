@@ -2,13 +2,14 @@
 
 const { loadPolicy } = require('./policy');
 const { mergeIssueBody, normalizeBodyForComparison } = require('./parsing');
-const { getIssue, listIssues, editIssue, commentIssue, normalizeLabels } = require('./gh-api');
+const { getIssue, listIssues, editIssue, commentIssue } = require('./gh-api');
 const {
   assertIssueClaimable,
   buildIssueComment,
   buildIssueStateFromAction,
   desiredLabelsForState,
   getCoordinationState,
+  staleCoordinationLabels,
   summarizeStateForOutput,
   syncIssueLabels,
   verifyDependenciesClosed,
@@ -26,13 +27,6 @@ function assertValidIssueNumber(issueNumber) {
   if (!Number.isFinite(issueNumber) || issueNumber <= 0 || !Number.isInteger(issueNumber)) {
     throw new Error(`invalid issueNumber: expected positive integer, got ${JSON.stringify(issueNumber)}`);
   }
-}
-
-function staleCoordinationLabels(issue, nextLabels, policy) {
-  const epicLabel = policy.labels && policy.labels.epic;
-  return normalizeLabels(issue.labels).filter(l =>
-    (l.startsWith('coordination:') || l === epicLabel) && !nextLabels.includes(l)
-  );
 }
 
 // applyClaim performs a read (getIssue) → check (assertIssueClaimable) → write
