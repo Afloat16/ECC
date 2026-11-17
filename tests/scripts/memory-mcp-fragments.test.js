@@ -150,7 +150,7 @@ test('real stdio fragments copy a bounded multiple of the message bytes', async 
 
 test('one-byte fragments preserve split multibyte request IDs and CRLF framing', async t => {
   const { input, waitFor } = await transport(t);
-  const id = '请求-🙂-e\u0301';
+  const id = '请求-\u{1F642}-e\u0301';
   writeFragments(input, Buffer.from(`${JSON.stringify(ping(id))}\r\n`), 1);
   assert.deepEqual(await waitFor(1), [{ jsonrpc: '2.0', id, result: {} }]);
 });
