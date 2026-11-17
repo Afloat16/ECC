@@ -434,7 +434,9 @@ function createMemoryMcpService(options = {}) {
         });
       }
 
-      if (!initialized) {
+      // MCP permits pings while an accepted initialization handshake is pending.
+      const isInitializationPing = initializationRequested && message.method === 'ping';
+      if (!initialized && !isInitializationPing) {
         return jsonRpcError(message.id, -32002, 'Server is not initialized.');
       }
       if (message.method === 'ping') {
