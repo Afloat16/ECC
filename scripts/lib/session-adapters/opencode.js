@@ -162,6 +162,9 @@ function readMessageFiles(messageDir) {
   try {
     return fs.readdirSync(messageDir)
       .filter(name => name.startsWith('msg_') && name.endsWith('.json'))
+      // OpenCode message IDs sort chronologically; inspect recent model choices first.
+      .sort()
+      .reverse()
       .map(name => path.join(messageDir, name));
   } catch {
     return [];
