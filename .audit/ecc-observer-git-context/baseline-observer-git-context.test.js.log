@@ -1,0 +1,201 @@
+
+=== observer Git context tests ===
+
+  ✗ explicit project root ignores an inherited foreign repository
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '544f3d36bede'
+- 'ee4796e8032d'
+
+    at expectProject (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:87:10)
+    at /workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:110:3
+    at test (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:44:5)
+    at Object.<anonymous> (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:109:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  ✗ project discovery uses the requested checkout from a subdirectory
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/workspace/scratch/4bed741d4966/tmp/ecc-observer-git-context-lBHy1D/foreign'
+- '/workspace/scratch/4bed741d4966/tmp/ecc-observer-git-context-lBHy1D/target'
+
+    at expectProject (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:86:10)
+    at /workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:116:3
+    at test (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:44:5)
+    at Object.<anonymous> (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:114:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  ✗ GIT_COMMON_DIR alone cannot replace the target origin
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '544f3d36bede'
+- 'ee4796e8032d'
+
+    at expectProject (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:87:10)
+    at /workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:120:3
+    at test (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:44:5)
+    at Object.<anonymous> (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:119:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  ✗ registry selection keeps the target remote id over a newer stale alias
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ 'stale-project'
+- 'ee4796e8032d'
+
+    at expectProject (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:87:10)
+    at /workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:132:3
+    at test (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:44:5)
+    at Object.<anonymous> (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:124:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  ✗ remote-free linked worktree keeps the main checkout identity
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/workspace/scratch/4bed741d4966/tmp/ecc-observer-git-context-y8xCO6/foreign'
+- '/workspace/scratch/4bed741d4966/tmp/ecc-observer-git-context-y8xCO6/linked'
+
+    at expectProject (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:86:10)
+    at /workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:144:3
+    at test (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:44:5)
+    at Object.<anonymous> (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:136:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  ✗ non-repository directory does not acquire a foreign explicit worktree
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '544f3d36bede'
+- 'global'
+
+    at /workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:151:10
+    at test (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:44:5)
+    at Object.<anonymous> (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:147:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+  ✓ ordinary checkout discovery is unchanged without Git-local variables
+  ✓ matching Git-local context retains the same checkout identity
+  ✗ nested checkout wins over the enclosing inherited worktree
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/workspace/scratch/4bed741d4966/tmp/ecc-observer-git-context-FKWOBU/foreign'
+- '/workspace/scratch/4bed741d4966/tmp/ecc-observer-git-context-FKWOBU/foreign/nested'
+
+    at expectProject (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:86:10)
+    at /workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:168:3
+    at test (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:44:5)
+    at Object.<anonymous> (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:165:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  ✗ foreign GIT_DIR alone cannot claim a subdirectory of an ordinary checkout
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/workspace/scratch/4bed741d4966/tmp/ecc-observer-git-context-eTyUIi/target/src'
+- '/workspace/scratch/4bed741d4966/tmp/ecc-observer-git-context-eTyUIi/target'
+
+    at expectProject (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:86:10)
+    at /workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:172:3
+    at test (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:44:5)
+    at Object.<anonymous> (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:171:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  ✗ relative foreign Git paths are interpreted from the original process directory
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context'
+- '/workspace/scratch/4bed741d4966/tmp/ecc-observer-git-context-kWR7Bm/target'
+
+    at expectProject (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:86:10)
+    at /workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:177:3
+    at test (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:44:5)
+    at Object.<anonymous> (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:176:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  ✓ environment-only worktree survives (explicit=false, workTree=false)
+  ✓ environment-only worktree survives (explicit=false, workTree=true)
+  ✓ environment-only worktree survives (explicit=true, workTree=false)
+  ✓ environment-only worktree survives (explicit=true, workTree=true)
+  ✗ relative environment-only metadata and worktree survive a different requested cwd
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context'
+- '/workspace/scratch/4bed741d4966/tmp/ecc-observer-git-context-ZVHLgT/target'
+
+    at expectProject (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:86:10)
+    at /workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:195:3
+    at test (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:44:5)
+    at Object.<anonymous> (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:193:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  ✗ relative GIT_DIR with core.worktree survives a different requested cwd
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context'
+- '/workspace/scratch/4bed741d4966/tmp/ecc-observer-git-context-XEJEph/target'
+
+    at expectProject (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:86:10)
+    at /workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:201:3
+    at test (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:44:5)
+    at Object.<anonymous> (/workspace/scratch/4bed741d4966/worktrees/ecc-observer-git-context/tests/lib/observer-git-context.test.js:199:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  ✓ explicit environment-only worktree inside another checkout survives (workTree=false)
+  ✓ explicit environment-only worktree inside another checkout survives (workTree=true)
+  ✓ GIT_DIR-only worktree without another checkout retains its implicit cwd
+
+Passed: 9, Failed: 11

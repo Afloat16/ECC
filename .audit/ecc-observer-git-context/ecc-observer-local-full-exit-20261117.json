@@ -1,0 +1,9 @@
+{
+  "returncode": 1,
+  "node": "v24.22.1",
+  "base": "58f5f5c603942d2b93a2b99ce5e9a675b6d70e65",
+  "cleared_fixture_environment": [
+    "XDG_DATA_HOME",
+    "CLV2_HOMUNCULUS_DIR"
+  ]
+}

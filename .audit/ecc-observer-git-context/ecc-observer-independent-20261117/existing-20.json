@@ -1,0 +1,13 @@
+{
+  "base": "58f5f5c603942d2b93a2b99ce5e9a675b6d70e65",
+  "source_sha256": "6234f1f8581389472eb7db87ee483e8666e19fc5140c9028aa5c762beee7d2b9",
+  "test_sha256": "a481547019af5f9dbd16aa0533c0c454e0aaf04bfdc5bd3fc0886a9c6ef22038",
+  "command": [
+    "node",
+    "tests/lib/observer-git-context.test.js"
+  ],
+  "returncode": 0,
+  "stdout": "\n=== observer Git context tests ===\n\n  \u2713 explicit project root ignores an inherited foreign repository\n  \u2713 project discovery uses the requested checkout from a subdirectory\n  \u2713 GIT_COMMON_DIR alone cannot replace the target origin\n  \u2713 registry selection keeps the target remote id over a newer stale alias\n  \u2713 remote-free linked worktree keeps the main checkout identity\n  \u2713 non-repository directory does not acquire a foreign explicit worktree\n  \u2713 ordinary checkout discovery is unchanged without Git-local variables\n  \u2713 matching Git-local context retains the same checkout identity\n  \u2713 nested checkout wins over the enclosing inherited worktree\n  \u2713 foreign GIT_DIR alone cannot claim a subdirectory of an ordinary checkout\n  \u2713 relative foreign Git paths are interpreted from the original process directory\n  \u2713 environment-only worktree survives (explicit=false, workTree=false)\n  \u2713 environment-only worktree survives (explicit=false, workTree=true)\n  \u2713 environment-only worktree survives (explicit=true, workTree=false)\n  \u2713 environment-only worktree survives (explicit=true, workTree=true)\n  \u2713 relative environment-only metadata and worktree survive a different requested cwd\n  \u2713 relative GIT_DIR with core.worktree survives a different requested cwd\n  \u2713 explicit environment-only worktree inside another checkout survives (workTree=false)\n  \u2713 explicit environment-only worktree inside another checkout survives (workTree=true)\n  \u2713 GIT_DIR-only worktree without another checkout retains its implicit cwd\n\nPassed: 20, Failed: 0\n",
+  "stderr": "",
+  "scope": "Independent rerun of submitted 20 real Git cases on Linux; Windows-only cases not exercised."
+}

@@ -1,0 +1,9 @@
+{
+  "base": "58f5f5c603942d2b93a2b99ce5e9a675b6d70e65",
+  "source_sha256": "6234f1f8581389472eb7db87ee483e8666e19fc5140c9028aa5c762beee7d2b9",
+  "probe_sha256": "2156d705c7ead6821f4d51437e0505b3d3eecd2b63e224efd4273abdf73a7c0e",
+  "returncode": 0,
+  "stdout": "  \u2713 independent: all four relative Git path keys share the original cwd\n  \u2713 independent: relative common and index paths match actual Git worktree semantics\n  \u2713 independent: clean context preserves Git configuration environment\n  \u2713 independent: symlink spelling preserves the environment-only worktree\n{\"passed\":4,\"failed\":0}\n",
+  "stderr": "",
+  "scope": "Four additional real-Git boundary cases. Initial test assumptions for GIT_COMMON_DIR and multi-valued remote.origin.url were invalid; preserved initial output separately and replaced those assumptions with independent Git commands, without modifying product source."
+}

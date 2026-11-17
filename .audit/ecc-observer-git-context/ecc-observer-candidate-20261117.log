@@ -1,0 +1,25 @@
+
+=== observer Git context tests ===
+
+  ✓ explicit project root ignores an inherited foreign repository
+  ✓ project discovery uses the requested checkout from a subdirectory
+  ✓ GIT_COMMON_DIR alone cannot replace the target origin
+  ✓ registry selection keeps the target remote id over a newer stale alias
+  ✓ remote-free linked worktree keeps the main checkout identity
+  ✓ non-repository directory does not acquire a foreign explicit worktree
+  ✓ ordinary checkout discovery is unchanged without Git-local variables
+  ✓ matching Git-local context retains the same checkout identity
+  ✓ nested checkout wins over the enclosing inherited worktree
+  ✓ foreign GIT_DIR alone cannot claim a subdirectory of an ordinary checkout
+  ✓ relative foreign Git paths are interpreted from the original process directory
+  ✓ environment-only worktree survives (explicit=false, workTree=false)
+  ✓ environment-only worktree survives (explicit=false, workTree=true)
+  ✓ environment-only worktree survives (explicit=true, workTree=false)
+  ✓ environment-only worktree survives (explicit=true, workTree=true)
+  ✓ relative environment-only metadata and worktree survive a different requested cwd
+  ✓ relative GIT_DIR with core.worktree survives a different requested cwd
+  ✓ explicit environment-only worktree inside another checkout survives (workTree=false)
+  ✓ explicit environment-only worktree inside another checkout survives (workTree=true)
+  ✓ GIT_DIR-only worktree without another checkout retains its implicit cwd
+
+Passed: 20, Failed: 0

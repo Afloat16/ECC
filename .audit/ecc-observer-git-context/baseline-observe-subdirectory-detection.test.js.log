@@ -1,0 +1,26 @@
+
+=== Observe.sh Subdirectory Project Detection Tests ===
+
+PASS: observe.sh resolves cwd to git root before setting CLAUDE_PROJECT_DIR
+PASS: git rev-parse resolves a subdirectory to the repo root
+PASS: git rev-parse fails cleanly outside a repo when discovery is bounded
+FAIL: observe.sh writes project metadata for the git root when cwd is a subdirectory
+FAIL: observe.sh falls back to CLAUDE_HOOK_EVENT_NAME when no phase argument is passed
+FAIL: observe.sh records non-git cwd payloads globally without project registry side effects
+FAIL: observe.sh does not infer a project from inherited cwd when payload cwd is missing
+FAIL: observe.sh rejects invalid and relative payload cwd without inherited project fallback
+FAIL: observe.sh scrubs secrets from persisted cwd metadata
+FAIL: a live global observer does not suppress the current project observer
+
+Passed: 3
+Failed: 7
+  ENOENT: no such file or directory, scandir '/workspace/scratch/4bed741d4966/tmp/ecc-observe-subdir-test-C6xtIE/home/.local/share/ecc-homunculus/projects'
+  ENOENT: no such file or directory, scandir '/workspace/scratch/4bed741d4966/tmp/ecc-observe-subdir-test-PigPrm/home/.local/share/ecc-homunculus/projects'
+  non-git cwd should still record a global observation
+  The expression evaluated to a falsy value:
+
+  assert.ok(fs.existsSync(path.join(homunculusDir, 'observations.jsonl')))
+
+  ENOENT: no such file or directory, open '/workspace/scratch/4bed741d4966/tmp/ecc-observe-subdir-test-QgiLCO/home/.local/share/ecc-homunculus/observations.jsonl'
+  ENOENT: no such file or directory, scandir '/workspace/scratch/4bed741d4966/tmp/ecc-observe-subdir-test-gOMuXE/home/.local/share/ecc-homunculus/projects'
+  ENOENT: no such file or directory, scandir '/workspace/scratch/4bed741d4966/tmp/ecc-observe-subdir-test-rrhKvA/home/.local/share/ecc-homunculus/projects'

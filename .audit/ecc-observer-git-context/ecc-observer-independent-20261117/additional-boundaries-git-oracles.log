@@ -1,0 +1,5 @@
+  ✓ independent: all four relative Git path keys share the original cwd
+  ✓ independent: relative common and index paths match actual Git worktree semantics
+  ✓ independent: clean context preserves Git configuration environment
+  ✓ independent: symlink spelling preserves the environment-only worktree
+{"passed":4,"failed":0}

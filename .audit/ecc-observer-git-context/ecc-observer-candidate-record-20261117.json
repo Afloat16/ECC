@@ -1,0 +1,57 @@
+{
+  "sha": "af8221afbf6c4693acccbc3c94ef17f857358e69",
+  "tree": "483cf0be36e56ca2ed9308dcce55aaad8db4055c",
+  "base": "58f5f5c603942d2b93a2b99ce5e9a675b6d70e65",
+  "branch": "fix/observer-git-context-20261117",
+  "repository": "Afloat16/ECC",
+  "upstream_pr": null,
+  "status": "candidate_paused_at_author_open_pr_cap",
+  "prepared_counted": false,
+  "cap": 10,
+  "current_author_open_prs": [
+    3960,
+    3961,
+    3962,
+    3963,
+    3964,
+    3965,
+    3966,
+    3977,
+    3979,
+    3980
+  ],
+  "validation": {
+    "new_baseline": {
+      "passed": 9,
+      "failed": 11
+    },
+    "new_candidate": {
+      "passed": 20,
+      "failed": 0
+    },
+    "related": {
+      "files": 8,
+      "passed": 127,
+      "failed": 0
+    },
+    "coverage": {
+      "lines": 92.43,
+      "statements": 92.43,
+      "branches": 89.79,
+      "functions": 93.1
+    },
+    "independent_review": "approve; original 20 and four additional actual Git boundaries pass",
+    "local_full": {
+      "files": 509,
+      "passed": 478,
+      "failed": 31,
+      "execution_integrity": true,
+      "limitations": "Shared filesystem reached capacity during the run. The 31 failed files have not been individually classified; full-suite success is not claimed."
+    },
+    "native_windows_macos": "not executed"
+  },
+  "limitations": [
+    "GIT_DIR-only context without an explicit worktree or a discoverable checkout remains inherently ambiguous; existing behavior is retained.",
+    "This branch is not submitted while the account is at the concurrent PR cap."
+  ]
+}

@@ -1,0 +1,37 @@
+  ✓ independent: all four relative Git path keys share the original cwd
+  ✗ independent: relative common and index paths preserve a configured worktree
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/workspace/scratch/4bed741d4966/audit/ecc-observer-independent-20261117/tmp/ecc-observer-git-context-F62k83/target/src'
+- '/workspace/scratch/4bed741d4966/audit/ecc-observer-independent-20261117/tmp/ecc-observer-git-context-F62k83/target'
+
+    at expectProject (/workspace/scratch/4bed741d4966/audit/ecc-observer-independent-20261117/additional-boundaries.js:86:10)
+    at /workspace/scratch/4bed741d4966/audit/ecc-observer-independent-20261117/additional-boundaries.js:120:3
+    at test (/workspace/scratch/4bed741d4966/audit/ecc-observer-independent-20261117/additional-boundaries.js:44:5)
+    at Object.<anonymous> (/workspace/scratch/4bed741d4966/audit/ecc-observer-independent-20261117/additional-boundaries.js:116:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  ✗ independent: clean context preserves Git configuration environment
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ 'ee4796e8032d'
+- 'bc6e45456005'
+
+    at expectProject (/workspace/scratch/4bed741d4966/audit/ecc-observer-independent-20261117/additional-boundaries.js:87:10)
+    at /workspace/scratch/4bed741d4966/audit/ecc-observer-independent-20261117/additional-boundaries.js:127:3
+    at test (/workspace/scratch/4bed741d4966/audit/ecc-observer-independent-20261117/additional-boundaries.js:44:5)
+    at Object.<anonymous> (/workspace/scratch/4bed741d4966/audit/ecc-observer-independent-20261117/additional-boundaries.js:124:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  ✓ independent: symlink spelling preserves the environment-only worktree
+{"passed":2,"failed":2}

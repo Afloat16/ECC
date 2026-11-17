@@ -1,0 +1,259 @@
+ECC_TEST_PLAN {"jobs":1,"files":["hooks/observe-subdirectory-detection.test.js","hooks/observer-loop-archive.test.js","hooks/observer-loop-mktemp.test.js","hooks/observer-memory.test.js","hooks/observer-session-lifecycle.test.js","lib/observer-git-context.test.js","lib/observer-sessions.test.js","skills/observer-status-instinct-count.test.js"]}
+╔══════════════════════════════════════════════════════════╗
+║           ECC - Test Suite                               ║
+╚══════════════════════════════════════════════════════════╝
+
+Only patterns: observer, observe-subdirectory
+
+
+━━━ Running hooks/observe-subdirectory-detection.test.js ━━━
+
+=== Observe.sh Subdirectory Project Detection Tests ===
+
+PASS: observe.sh resolves cwd to git root before setting CLAUDE_PROJECT_DIR
+PASS: git rev-parse resolves a subdirectory to the repo root
+PASS: git rev-parse fails cleanly outside a repo when discovery is bounded
+PASS: observe.sh writes project metadata for the git root when cwd is a subdirectory
+PASS: observe.sh falls back to CLAUDE_HOOK_EVENT_NAME when no phase argument is passed
+PASS: observe.sh records non-git cwd payloads globally without project registry side effects
+PASS: observe.sh does not infer a project from inherited cwd when payload cwd is missing
+PASS: observe.sh rejects invalid and relative payload cwd without inherited project fallback
+PASS: observe.sh scrubs secrets from persisted cwd metadata
+PASS: a live global observer does not suppress the current project observer
+
+Passed: 10
+Failed: 0
+
+ECC_TEST_FILE {"file":"hooks/observe-subdirectory-detection.test.js","phase":"serial","attemptedAt":"2026-11-17T06:29:35.299Z","completedAt":"2026-11-17T06:29:37.440Z","durationMs":2140.227994,"exitCode":0,"signal":null,"error":null,"outcome":"passed"}
+
+━━━ Running hooks/observer-loop-archive.test.js ━━━
+
+=== Observer-loop Archive-on-Failure Tests (#2370, #2673) ===
+
+--- behavioral ---
+  ✓ failed analysis retains observations and archives nothing
+  ✓ zero-exit analysis without a completion record retains observations
+  ✓ mentioning the completion record in prose does not authorize archival
+  ✓ completion record followed by failure text does not authorize archival
+  ✓ a completion record from an older log entry cannot authorize this run
+  ✓ a completion record written only to stderr does not authorize archival
+  ✓ duplicate exact completion records do not authorize archival
+  ✓ replacing the result pathname cannot forge completion
+  ✓ successful analysis archives the original batch byte-for-byte
+  ✓ completion record accepts a CRLF line ending
+  ✓ watchdog force-stops a process that ignores TERM and retains observations
+--- static guards ---
+  ✓ process and semantic failure guards run before archival
+  ✓ observer-loop.sh has a source guard
+
+=== Test Results ===
+Passed: 13
+Failed: 0
+Skipped: 0
+Total:  13
+
+
+ECC_TEST_FILE {"file":"hooks/observer-loop-archive.test.js","phase":"serial","attemptedAt":"2026-11-17T06:29:37.441Z","completedAt":"2026-11-17T06:29:40.977Z","durationMs":3535.8894800000003,"exitCode":0,"signal":null,"error":null,"outcome":"passed"}
+
+━━━ Running hooks/observer-loop-mktemp.test.js ━━━
+
+=== Observer-loop mktemp portability regression (#2417) ===
+
+  ✓ every mktemp template ends with the randomized X run
+
+=== Test Results ===
+Passed: 1
+Failed: 0
+Total:  1
+
+
+ECC_TEST_FILE {"file":"hooks/observer-loop-mktemp.test.js","phase":"serial","attemptedAt":"2026-11-17T06:29:40.977Z","completedAt":"2026-11-17T06:29:41.045Z","durationMs":68.56356699999924,"exitCode":0,"signal":null,"error":null,"outcome":"passed"}
+
+━━━ Running hooks/observer-memory.test.js ━━━
+
+=== Observer Memory Fix Tests (#521) ===
+
+--- observe.sh signal throttling ---
+  ✓ observe.sh contains SIGNAL_EVERY_N throttle variable
+  ✓ observe.sh uses a counter file instead of signaling every call
+  ✓ observe.sh only signals when counter reaches threshold
+  ✓ observe.sh default throttle is 20 observations per signal
+  ✓ observe.sh touches observer activity marker on each observation
+  ✓ observe.sh avoids persistence-looking cleanup and lazy-start signatures
+
+--- observer-loop.sh re-entrancy guard ---
+  ✓ observer-loop.sh defines ANALYZING guard variable
+  ✓ on_usr1 checks ANALYZING before starting analysis
+  ✓ on_usr1 sets ANALYZING=1 before and ANALYZING=0 after analysis
+  ✓ observer-loop checks pending analysis before sleeping
+
+--- observer-loop.sh cooldown throttle ---
+  ✓ observer-loop.sh defines ANALYSIS_COOLDOWN
+  ✓ on_usr1 enforces cooldown between analyses
+  ✓ default cooldown is 60 seconds
+  ✓ observer-loop.sh defines idle timeout fallback
+  ✓ observer-loop.sh checks session lease directory before self-termination
+
+--- observer-loop.sh tail-based sampling ---
+  ✓ analyze_observations uses tail to sample recent observations
+  ✓ default max analysis lines is 500
+  ✓ analysis temp file is created and cleaned up
+  ✓ observer-loop uses project-local temp directory for analysis artifacts
+  ✓ observer-loop loads prompt content before invoking claude
+  ✓ observer-loop prompt requires direct instinct writes without asking permission
+  ✓ prompt references analysis_file not full OBSERVATIONS_FILE
+  ✓ observer uses an absolute analysis path outside Windows
+  ✓ observer-loop wait helper retries SIGUSR1-interrupted waits while claude child is alive
+  ✓ observer-loop wait helper preserves real nonzero claude exits
+
+--- Signal counter file behavior ---
+  ✓ counter file increments and resets correctly
+  ✓ counter file handles missing/corrupt file gracefully
+
+--- observe.sh end-to-end throttle (shell execution) ---
+  ✓ observe.sh creates counter file and increments on each call
+
+--- Observer Haiku invocation flags ---
+  ✓ claude invocation includes --allowedTools flag
+  ✓ allowedTools includes Read permission
+  ✓ allowedTools includes Write permission
+  ✓ claude invocation still includes ECC_SKIP_OBSERVE and ECC_HOOK_PROFILE guards
+
+=== Test Results ===
+Passed: 32
+Failed: 0
+Total:  32
+
+
+ECC_TEST_FILE {"file":"hooks/observer-memory.test.js","phase":"serial","attemptedAt":"2026-11-17T06:29:41.046Z","completedAt":"2026-11-17T06:29:41.827Z","durationMs":781.6019509999996,"exitCode":0,"signal":null,"error":null,"outcome":"passed"}
+
+━━━ Running hooks/observer-session-lifecycle.test.js ━━━
+
+=== Observer session lifecycle tests ===
+
+  ✓ SessionStart creates separate observer leases from stdin without environment IDs
+  ✓ SessionEnd CLI removes the payload lease, retains others, then cleans up the final observer
+  ✓ in-process SessionEnd stops the observer only after the final payload lease ends
+  ✓ in-process SessionEnd releases a lease left under the root's older id after a remote was added mid-session
+  ✓ in-process SessionEnd keeps observers running while another session still holds a lease under an older id
+  ✓ both lifecycle hooks retain ECC_SESSION_ID fallback for malformed stdin
+  ✓ both lifecycle hooks retain CLAUDE_SESSION_ID fallback for malformed stdin
+  ✓ payload ID overrides environment IDs in both lifecycle hooks
+  ✓ observer lease filenames sanitize path characters and Windows reserved IDs
+  ✓ null JSON is harmless without session IDs and SessionEnd preserves the raw payload
+
+Passed: 10
+Failed: 0
+
+ECC_TEST_FILE {"file":"hooks/observer-session-lifecycle.test.js","phase":"serial","attemptedAt":"2026-11-17T06:29:41.828Z","completedAt":"2026-11-17T06:29:43.546Z","durationMs":1718.3304870000002,"exitCode":0,"signal":null,"error":null,"outcome":"passed"}
+
+━━━ Running lib/observer-git-context.test.js ━━━
+
+=== observer Git context tests ===
+
+  ✓ explicit project root ignores an inherited foreign repository
+  ✓ project discovery uses the requested checkout from a subdirectory
+  ✓ GIT_COMMON_DIR alone cannot replace the target origin
+  ✓ registry selection keeps the target remote id over a newer stale alias
+  ✓ remote-free linked worktree keeps the main checkout identity
+  ✓ non-repository directory does not acquire a foreign explicit worktree
+  ✓ ordinary checkout discovery is unchanged without Git-local variables
+  ✓ matching Git-local context retains the same checkout identity
+  ✓ nested checkout wins over the enclosing inherited worktree
+  ✓ foreign GIT_DIR alone cannot claim a subdirectory of an ordinary checkout
+  ✓ relative foreign Git paths are interpreted from the original process directory
+  ✓ environment-only worktree survives (explicit=false, workTree=false)
+  ✓ environment-only worktree survives (explicit=false, workTree=true)
+  ✓ environment-only worktree survives (explicit=true, workTree=false)
+  ✓ environment-only worktree survives (explicit=true, workTree=true)
+  ✓ relative environment-only metadata and worktree survive a different requested cwd
+  ✓ relative GIT_DIR with core.worktree survives a different requested cwd
+  ✓ explicit environment-only worktree inside another checkout survives (workTree=false)
+  ✓ explicit environment-only worktree inside another checkout survives (workTree=true)
+  ✓ GIT_DIR-only worktree without another checkout retains its implicit cwd
+
+Passed: 20, Failed: 0
+
+ECC_TEST_FILE {"file":"lib/observer-git-context.test.js","phase":"serial","attemptedAt":"2026-11-17T06:29:43.546Z","completedAt":"2026-11-17T06:29:45.983Z","durationMs":2436.993303000001,"exitCode":0,"signal":null,"error":null,"outcome":"passed"}
+
+━━━ Running lib/observer-sessions.test.js ━━━
+
+=== observer-sessions tests ===
+
+  ✓ getHomunculusDir prefers absolute CLV2_HOMUNCULUS_DIR
+  ✓ getHomunculusDir ignores relative overrides and uses XDG_DATA_HOME
+  ✓ normalizeRemoteUrl collapses common network remote variants
+  ✓ normalizeRemoteUrl preserves local path case
+  ✓ resolveProjectContext gives SSH and HTTPS clones the same project id
+  ✓ resolveProjectContext follows the remote-hash id when a remote was added after the first session
+  ✓ resolveProjectContext picks the most recently seen entry when no duplicate matches the computed id
+  ✓ resolveProjectContext prefers the observer id when its folder holds instincts but projects.json lacks it
+  ✓ resolveProjectContext moves off a sole legacy entry once the observer has written under the computed id
+  ✓ resolveProjectContext keeps a sole registry entry when the computed id folder has no observer data
+  ✓ resolveProjectContext keeps a single registry entry even when its id differs from the computed one
+  ✓ resolveProjectContext uses the main checkout id for a remote-free linked worktree with duplicate entries
+  ✓ resolveProjectContext ignores unsafe registry ids before making alias paths
+  ✓ resolveProjectContext counts repeated registry ids as one alias
+  ✓ resolveProjectContext matches registry roots through directory aliases
+  ✓ resolveProjectContext ignores missing registry roots without adopting their ids
+  ✓ resolveProjectContext compares native long paths when legacy realpath retains a short spelling
+  ✓ resolveProjectContext retains root comparison when the native realpath API is unavailable
+
+Passed: 18
+Failed: 0
+
+[ecc] CLV2_HOMUNCULUS_DIR=relative-store is not absolute; ignoring
+
+ECC_TEST_FILE {"file":"lib/observer-sessions.test.js","phase":"serial","attemptedAt":"2026-11-17T06:29:45.984Z","completedAt":"2026-11-17T06:29:46.284Z","durationMs":300.69003899999916,"exitCode":0,"signal":null,"error":null,"outcome":"passed"}
+
+━━━ Running skills/observer-status-instinct-count.test.js ━━━
+
+=== Testing observer status instinct count (#2859) ===
+
+  PASS the loader still declares several instinct extensions
+  PASS status counts .yaml - the loader accepts it
+  PASS status counts .yml - the loader accepts it
+  PASS status counts .md - the loader accepts it
+  PASS status does not recurse - the loader does not
+  PASS status skips directories
+  PASS status matches case-insensitively
+  PASS start-observer.sh parses
+  PASS markdown instincts are counted
+  PASS the count matches the loader eligible-file rules
+  PASS an empty instincts directory reports 0
+  PASS hidden stems count but dot-only extension names have no suffix
+  PASS newlines and spaces in one eligible filename count once
+  PASS shell metacharacters in a filename remain inert data
+  PASS status dispatches a fixed private wrapper file without inline shell code
+  PASS status target path metacharacters remain data and exec retains the advertised PID
+  PASS linked regular files count without traversing directory links
+  PASS status child has a private environment and bounded execution
+  PASS timeout cleans its private fixture
+  PASS nonzero cleans its private fixture
+  PASS spawn error cleans its private fixture
+  PASS cleanup preserves frozen and falsy primary failures
+  PASS cleanup failure is reported when the fixture otherwise succeeds
+
+  Passed: 23
+  Failed: 0
+  Skipped: 0
+
+ECC_TEST_FILE {"file":"skills/observer-status-instinct-count.test.js","phase":"serial","attemptedAt":"2026-11-17T06:29:46.285Z","completedAt":"2026-11-17T06:29:46.619Z","durationMs":334.8764339999998,"exitCode":0,"signal":null,"error":null,"outcome":"passed"}
+ECC_TEST_COMPLETE {"counts":{"planned":8,"attempted":8,"completed":8,"passed":8,"failed":0},"integrity":{"ok":true,"errors":[]}}
+
+╔══════════════════════════════════════════════════════════╗
+║                     Final Results                        ║
+╠══════════════════════════════════════════════════════════╣
+║  Total Tests:  127                                       ║
+║  Passed:       127  ✓                                    ║
+║  Failed:         0                                       ║
+║  Files: 8 passed, 0 failed                               ║
+╚══════════════════════════════════════════════════════════╝
+
+Passed: 127, Failed: 0
+----------------------|---------|----------|---------|---------|------------------------------------
+File                  | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                  
+----------------------|---------|----------|---------|---------|------------------------------------
+All files             |   92.43 |    89.79 |    93.1 |   92.43 |                                    
+ observer-sessions.js |   92.43 |    89.79 |    93.1 |   92.43 | ...259-261,263-265,304-305,325-341 
+----------------------|---------|----------|---------|---------|------------------------------------
