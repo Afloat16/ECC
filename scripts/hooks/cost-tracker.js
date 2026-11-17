@@ -25,7 +25,7 @@
  *
  * Harness-cost contract (optional, opt-in by the statusline):
  *   If the user's statusline (which receives `cost.total_cost_usd` directly
- *   from Claude Code) writes `{ts, cost_usd}` to
+ *   from Claude Code) writes `{ts, cost_usd}` (finite numbers) to
  *   `<os.tmpdir()>/harness-cost-<session_id>.json` on each render, this hook
  *   prefers that authoritative value over the transcript-sum estimate when
  *   the cache is fresh (≤ 300s). The transcript-sum is kept as a safe
@@ -63,8 +63,8 @@ function readHarnessCost(sessionId, maxAgeSeconds) {
     const fp = path.join(os.tmpdir(), `harness-cost-${sessionId}.json`);
     if (!fs.existsSync(fp)) return null;
     const obj = JSON.parse(fs.readFileSync(fp, 'utf8'));
-    const ts = Number(obj && obj.ts);
-    const cost = Number(obj && obj.cost_usd);
+    const ts = obj?.ts;
+    const cost = obj?.cost_usd;
     if (!Number.isFinite(ts) || !Number.isFinite(cost) || cost < 0) return null;
     const age = Math.floor(Date.now() / 1000) - ts;
     if (age < 0 || age > maxAgeSeconds) return null;
