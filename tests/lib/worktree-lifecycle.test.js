@@ -99,20 +99,57 @@ test('git.listWorktrees parses porcelain output', () => {
 
 test('git.predictMergeConflicts: clean merge (exit 0) and conflict (exit !=0)', () => {
   const clean = fakeGit('/repo', {
-    'merge-tree --write-tree --name-only main feature': { status: 0, stdout: 'treeoid\n' }
+    'merge-tree --write-tree --name-only -z --no-messages main feature': { status: 0, stdout: 'treeoid\n' }
   });
   assert.strictEqual(clean.predictMergeConflicts('feature', 'main').conflicted, false);
 
   const conflicted = fakeGit('/repo', {
-    'merge-tree --write-tree --name-only main feature': {
+    'merge-tree --write-tree --name-only -z --no-messages main feature': {
       status: 1,
-      stdout: '0123456789012345678901234567890123456789\nsrc/app.js\nsrc/util.js\n'
+      stdout: '0123456789012345678901234567890123456789\0src/app.js\0src/util.js\0'
     }
   });
   const result = conflicted.predictMergeConflicts('feature', 'main');
   assert.strictEqual(result.conflicted, true);
   assert.deepStrictEqual(result.files, ['src/app.js', 'src/util.js']);
 });
+
+for (const objectFormat of ['sha1', 'sha256']) {
+  test(`real git: ${objectFormat} conflict reports retain exact filenames without diagnostic messages`, () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-conflict-paths-'));
+    const env = { ...process.env };
+    for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_PREFIX']) delete env[key];
+    const git = args => execFileSync('git', ['-C', dir, ...args], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const names = process.platform === 'win32'
+      ? ['plain.txt', 'space name.txt', 'source-\u4e2d\u6587.txt', 'a'.repeat(40)]
+      : ['plain.txt', 'space name.txt', 'tab\tname.txt', 'line\nname.txt', 'quote"name.txt', 'back\\slash.txt', 'trailing-space ', 'source-\u4e2d\u6587.txt', 'a'.repeat(40)];
+    try {
+      git(['init', '-q', '-b', 'main', `--object-format=${objectFormat}`]);
+      git(['config', 'user.name', 'Test']);
+      git(['config', 'user.email', 'test@example.invalid']);
+      for (const name of names) fs.writeFileSync(path.join(dir, name), 'base\n');
+      git(['add', '-A']);
+      git(['commit', '-qm', 'base']);
+      git(['checkout', '-qb', 'feature']);
+      for (const name of names) fs.writeFileSync(path.join(dir, name), 'feature\n');
+      git(['commit', '-qam', 'feature edits']);
+      git(['checkout', '-q', 'main']);
+      for (const name of names) fs.writeFileSync(path.join(dir, name), 'main\n');
+      git(['commit', '-qam', 'main edits']);
+      const before = git(['status', '--porcelain']);
+      const result = createGitRunner(dir).predictMergeConflicts('feature', 'main');
+      assert.strictEqual(result.conflicted, true);
+      assert.strictEqual(result.method, 'merge-tree');
+      assert.deepStrictEqual([...result.files].sort(), [...names].sort());
+      assert.strictEqual(git(['status', '--porcelain']), before, 'prediction must not alter the worktree');
+      assert.deepStrictEqual(createGitRunner(dir).predictMergeConflicts('main', 'main'), {
+        conflicted: false, files: [], method: 'merge-tree'
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
 
 test('git.listWorktrees fails instead of returning an empty successful listing', () => {
   for (const result of [
@@ -153,18 +190,18 @@ function fullRepoGit() {
     // ready: 2 ahead, clean merge
     'rev-list --left-right --count main...ready': { stdout: '0\t2\n' },
     'log -1 --format=%ct ready': { stdout: `${recent}\n` },
-    'merge-tree --write-tree --name-only main ready': { status: 0, stdout: 'tree\n' },
+    'merge-tree --write-tree --name-only -z --no-messages main ready': { status: 0, stdout: 'tree\n' },
     // conflict: 2 ahead, conflicts
     'rev-list --left-right --count main...conflict': { stdout: '1\t2\n' },
     'log -1 --format=%ct conflict': { stdout: `${recent}\n` },
-    'merge-tree --write-tree --name-only main conflict': { status: 1, stdout: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nsrc/x.js\n' },
+    'merge-tree --write-tree --name-only -z --no-messages main conflict': { status: 1, stdout: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\0src/x.js\0' },
     // merged: 0 ahead
     'rev-list --left-right --count main...merged': { stdout: '4\t0\n' },
     'log -1 --format=%ct merged': { stdout: `${recent}\n` },
     // stale: unmerged (2 ahead), clean merge, but old/inactive => salvage candidate
     'rev-list --left-right --count main...stale': { stdout: '0\t2\n' },
     'log -1 --format=%ct stale': { stdout: `${old}\n` },
-    'merge-tree --write-tree --name-only main stale': { status: 0, stdout: 'tree\n' },
+    'merge-tree --write-tree --name-only -z --no-messages main stale': { status: 0, stdout: 'tree\n' },
     // dirty: ahead but dirty (no merge-tree should run)
     'rev-list --left-right --count main...dirty': { stdout: '0\t1\n' },
     'log -1 --format=%ct dirty': { stdout: `${recent}\n` }

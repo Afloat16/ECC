@@ -123,16 +123,16 @@ function createGitRunner(repoRoot, runImpl = defaultRunImpl) {
     // `git merge-tree`. Prefers the modern --write-tree form (Git 2.38+),
     // which exits non-zero and lists conflicted paths on conflict.
     predictMergeConflicts(branch, baseBranch) {
-      const modern = run(['merge-tree', '--write-tree', '--name-only', baseBranch, branch]);
+      const modern = run(['merge-tree', '--write-tree', '--name-only', '-z', '--no-messages', baseBranch, branch]);
       if (modern.status === 0) {
         return { conflicted: false, files: [], method: 'merge-tree' };
       }
 
       // Non-zero with parseable output => real conflict (modern form).
       if (modern.stdout && /\S/.test(modern.stdout)) {
-        const lines = modern.stdout.split('\n').map(l => l.trim()).filter(Boolean);
-        // First line is the tree oid; subsequent lines are conflicted paths.
-        const files = lines.slice(1).filter(line => !/^[0-9a-f]{40}$/i.test(line));
+        // NUL-delimited paths are literal, and --no-messages excludes prose.
+        // The first field is the tree oid (for either SHA-1 or SHA-256).
+        const files = modern.stdout.split('\0').slice(1).filter(Boolean);
         return { conflicted: true, files, method: 'merge-tree' };
       }
 
