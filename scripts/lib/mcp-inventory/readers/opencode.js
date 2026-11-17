@@ -5,15 +5,16 @@ const os = require('os');
 const path = require('path');
 const { resolveOpencodeConfigRoot } = require('../../opencode-paths');
 const { resolveInvocationEnvironment } = require('../../invocation-environment');
+const { parseJsoncConfig } = require('../../install/hook-consent');
 
-// OpenCode stores MCP servers under "mcp" in its resolved configuration root.
+// OpenCode V1 stores MCP servers under "mcp"; V2 uses "mcp.servers".
 // Shape differs from Claude/Codex:
 //   { type: "local"|"remote", command: ["npx","-y","pkg"], environment: {},
-//     enabled: bool, url: "https://..." }
+//     enabled: bool (V1), disabled: bool (V2), url: "https://..." }
 // command is an ARRAY (binary + args combined); environment (not env) holds
 // secrets; type "local" => stdio, "remote" => http/sse.
 function mapOpencodeServer(name, raw, configPath) {
-  if (!raw || typeof raw !== 'object') {
+  if (!isRecord(raw)) {
     return null;
   }
 
@@ -29,7 +30,7 @@ function mapOpencodeServer(name, raw, configPath) {
     env: raw.environment && typeof raw.environment === 'object'
       ? raw.environment
       : (raw.env && typeof raw.env === 'object' ? raw.env : {}),
-    enabled: raw.enabled === false ? false : true,
+    enabled: raw.enabled !== false && raw.disabled !== true,
     source: {
       harness: 'opencode',
       scope: 'user',
@@ -38,39 +39,86 @@ function mapOpencodeServer(name, raw, configPath) {
   };
 }
 
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isServerConfig(value) {
+  return isRecord(value) && (
+    typeof value.type === 'string' || Array.isArray(value.command)
+    || typeof value.command === 'string' || typeof value.url === 'string'
+    || typeof value.enabled === 'boolean' || typeof value.disabled === 'boolean'
+  );
+}
+
+function serverEntries(config) {
+  const block = isRecord(config.mcp) ? config.mcp : config.mcpServers;
+  if (!isRecord(block)) {
+    return { entries: [], replace: false };
+  }
+  // A V1 server may itself be named "servers" or "timeout".
+  if (isRecord(block.servers) && !isServerConfig(block.servers)) {
+    return { entries: Object.entries(block.servers), replace: true };
+  }
+  return {
+    entries: Object.entries(block).filter(([name, raw]) => name !== 'timeout' || isServerConfig(raw)),
+    replace: false,
+  };
+}
+
+function mergeLegacyServer(previous, current) {
+  const merged = { ...previous, ...current };
+  for (const key of ['environment', 'env']) {
+    if (isRecord(previous[key]) && isRecord(current[key])) {
+      merged[key] = { ...previous[key], ...current[key] };
+    }
+  }
+  return merged;
+}
+
 function readOpencodeMcp(options = {}) {
   const homeDir = options.homeDir || os.homedir();
   const configRoot = resolveOpencodeConfigRoot({
     homeDir,
     env: resolveInvocationEnvironment(options),
   });
-  const candidatePaths = options.configPath
-    ? [options.configPath]
-    : [
+  const isFile = candidate => fs.existsSync(candidate) && fs.statSync(candidate).isFile();
+  let configPaths;
+  if (options.configPath) {
+    configPaths = [options.configPath].filter(isFile);
+  } else {
+    // OpenCode loads both modern files, with JSONC taking precedence.
+    configPaths = [
       path.join(configRoot, 'opencode.json'),
-      path.join(configRoot, 'config.json'),
-      path.join(homeDir, '.opencode.json')
-    ];
-
-  const configPath = candidatePaths.find(candidate => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
-  if (!configPath) {
-    return [];
+      path.join(configRoot, 'opencode.jsonc'),
+    ].filter(isFile);
+    if (configPaths.length === 0) {
+      const legacy = [
+        path.join(configRoot, 'config.json'),
+        path.join(homeDir, '.opencode.json')
+      ].find(isFile);
+      configPaths = legacy ? [legacy] : [];
+    }
   }
 
-  let parsed;
+  const servers = new Map();
   try {
-    parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    for (const configPath of configPaths) {
+      const parsed = parseJsoncConfig(fs.readFileSync(configPath, 'utf8'), configPath);
+      const { entries, replace } = serverEntries(parsed);
+      for (const [name, raw] of entries) {
+        if (!isRecord(raw)) continue;
+        const previous = servers.get(name);
+        // V2 replaces a named server as a whole; V1 inherits its settings.
+        const value = previous && !replace ? mergeLegacyServer(previous.raw, raw) : raw;
+        servers.set(name, { raw: value, configPath });
+      }
+    }
   } catch {
     return [];
   }
 
-  const block = parsed && typeof parsed.mcp === 'object' && parsed.mcp
-    ? parsed.mcp
-    : (parsed && typeof parsed.mcpServers === 'object' && parsed.mcpServers ? parsed.mcpServers : {});
-
-  return Object.entries(block)
-    .map(([name, raw]) => mapOpencodeServer(name, raw, configPath))
-    .filter(Boolean);
+  return [...servers].map(([name, { raw, configPath }]) => mapOpencodeServer(name, raw, configPath));
 }
 
 module.exports = {
