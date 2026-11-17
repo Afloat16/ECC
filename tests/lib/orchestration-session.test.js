@@ -197,6 +197,36 @@ test('listTmuxPanes returns an empty array when tmux is unavailable', () => {
   assert.deepStrictEqual(panes, []);
 });
 
+test('cross-window pane indexes retain separate worker associations and ordering', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-orch-windows-'));
+  try {
+    for (const worker of ['beta', 'alpha']) {
+      const directory = path.join(root, worker);
+      fs.mkdirSync(directory);
+      fs.writeFileSync(path.join(directory, 'status.md'), '- State: running\n');
+    }
+    const panes = listTmuxPanes('workers', {
+      spawnSyncImpl: () => ({ status: 0, stdout: [
+        '%96\t1\t0\tbeta\tnode\t/work/beta\t1\t0\t200',
+        '%95\t0\t0\talpha\tnode\t/work/alpha\t1\t0\t100',
+        '%97\t2\t0\tconsole\tsh\t/work\t1\t0\t300',
+        ''
+      ].join('\n') })
+    });
+    const snapshot = buildSessionSnapshot({ sessionName: 'workers', coordinationDir: root, panes });
+    assert.strictEqual(snapshot.paneCount, 3);
+    assert.strictEqual(snapshot.workerCount, 2);
+    assert.deepStrictEqual(snapshot.workers.map(worker => [
+      worker.workerSlug, worker.pane.paneId, worker.pane.windowIndex, worker.pane.paneIndex, worker.pane.pid
+    ]), [
+      ['alpha', '%95', 0, 0, 100],
+      ['beta', '%96', 1, 0, 200]
+    ]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('resolveSnapshotTarget handles plan files and direct session names', () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-orch-target-'));
   const repoRoot = path.join(tempRoot, 'repo');

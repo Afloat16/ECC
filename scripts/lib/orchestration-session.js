@@ -168,7 +168,7 @@ function listTmuxPanes(sessionName, options = {}) {
     '#{pane_pid}'
   ].join('\t');
 
-  const result = spawnSyncImpl('tmux', ['list-panes', '-t', sessionName, '-F', format], {
+  const result = spawnSyncImpl('tmux', ['list-panes', '-s', '-t', sessionName, '-F', format], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe']
   });
