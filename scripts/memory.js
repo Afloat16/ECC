@@ -333,9 +333,28 @@ function printWrite(result, json) {
   ].join('\n'));
 }
 
+function printSearchDiagnostics(diagnostics) {
+  const notes = [];
+  if (diagnostics.truncated) notes.push('scan limit reached');
+  if (diagnostics.invalidFileCount > 0) {
+    const count = diagnostics.invalidFileCount;
+    notes.push(`${count} invalid or unreadable file${count === 1 ? '' : 's'}`);
+  }
+  if (diagnostics.skippedSymlinkCount > 0) {
+    const count = diagnostics.skippedSymlinkCount;
+    notes.push(`${count} skipped symlink${count === 1 ? '' : 's'}`);
+  }
+  if (notes.length > 0) {
+    process.stderr.write(
+      `Memory search diagnostics: ${notes.join('; ')}. Run "ecc memory doctor --json" for details.\n`
+    );
+  }
+}
+
 function printSearch(query, result, json) {
   const payload = { schemaVersion: 'ecc.memory.search.v1', query, ...result };
   if (json) return writeJson(payload);
+  printSearchDiagnostics(result.diagnostics);
   if (result.results.length === 0) {
     process.stdout.write('No matching memories found.\n');
     return;
