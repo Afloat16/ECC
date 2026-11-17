@@ -10,8 +10,10 @@ const AGENT_COUNT = require('fs').readdirSync(require('path').join(__dirname,'..
 const assert = require("assert")
 const fs = require("fs")
 const path = require("path")
+const os = require("os")
 
-const { parseAgentFile, parseAllAgents, IR_SCHEMA_CONST } = require("../../scripts/lib/agent-ir")
+const { parseAgentFile, parseAllAgents, normalizeTools, IR_SCHEMA_CONST } = require("../../scripts/lib/agent-ir")
+const { emitPiAgent } = require("../../scripts/lib/agent-emit-pi")
 
 const REPO_ROOT = path.join(__dirname, "..", "..")
 const AGENTS_DIR = path.join(REPO_ROOT, "agents")
@@ -84,6 +86,45 @@ function main() {
       assert.ok(ir.frontmatter, "raw frontmatter must be retained")
       assert.strictEqual(ir.frontmatter.name, "planner", "frontmatter.name lossless")
       assert.ok(ir.body.includes("You are an expert planning specialist"), "body preserved")
+    }],
+
+    ["keeps commas inside scoped and quoted tool declarations", () => {
+      assert.deepStrictEqual(normalizeTools("Agent(worker, researcher), Read", "scoped.md"), ["Agent(worker, researcher)", "Read"])
+      assert.deepStrictEqual(normalizeTools('Bash(echo [a,b]), Grep', "scoped.md"), ["Bash(echo [a,b])", "Grep"])
+      assert.deepStrictEqual(normalizeTools('Bash(echo "a,b"), Glob', "scoped.md"), ['Bash(echo "a,b")', "Glob"])
+    }],
+
+    ["scoped tool arguments stay intact through YAML parsing and Pi emission", () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ecc-agent-scoped-"))
+      try {
+        const toolList = "Read, Bash(printf '%s' a, Write, b), Agent(worker, researcher)"
+        const file = path.join(dir, "scoped-agent.md")
+        fs.writeFileSync(file, `---\nname: scoped-agent\ndescription: scoped tools\ntools: ${JSON.stringify(toolList)}\n---\nAgent body.\n`)
+        const ir = parseAgentFile(file)
+        assert.strictEqual(ir.frontmatter.tools, toolList)
+        assert.deepStrictEqual(ir.tools, ["Read", "Bash(printf '%s' a, Write, b)", "Agent(worker, researcher)"])
+        const emitted = emitPiAgent(ir)
+        assert.deepStrictEqual(emitted.tools, ["read"])
+        assert.strictEqual(emitted.warnings.length, 2)
+        assert.ok(emitted.warnings.some(warning => warning.includes("Bash(printf '%s' a, Write, b)")))
+        assert.ok(emitted.warnings.some(warning => warning.includes("Agent(worker, researcher)")))
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+      }
+    }],
+
+    ["retains strict tool validation and array entry boundaries", () => {
+      for (const value of [false, 42, {}]) {
+        assert.throws(() => normalizeTools(value, "strict.md"), /strict\.md: tools must be a comma-separated string/)
+      }
+      for (const value of [["Read", false], ["Read", {}]]) {
+        assert.throws(() => normalizeTools(value, "strict.md"), /strict\.md: tools must contain only strings/)
+      }
+      const original = Object.freeze([" Agent(worker, researcher) ", "Read", " "])
+      assert.deepStrictEqual(normalizeTools(original, "array.md"), ["Agent(worker, researcher)", "Read"])
+      assert.deepStrictEqual(normalizeTools(null, "empty.md"), [])
+      assert.deepStrictEqual(normalizeTools(undefined, "empty.md"), [])
+      assert.deepStrictEqual(normalizeTools(" ", "empty.md"), [])
     }],
 
     ["throws on a missing frontmatter block", () => {

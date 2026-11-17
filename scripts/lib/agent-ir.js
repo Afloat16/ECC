@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const Ajv = require('ajv');
+const { normalizeAgentTools } = require('./agent-tools');
 
 const AGENTS_DIR = path.join(__dirname, '..', '..', 'agents');
 const SCHEMA_PATH = path.join(__dirname, '..', '..', 'schemas', 'agent.schema.json');
@@ -58,7 +59,7 @@ function normalizeTools(value, filename) {
   const entries = Array.isArray(value)
     ? value
     : typeof value === 'string'
-      ? value.split(',')
+      ? normalizeAgentTools(value)
       : null;
 
   if (entries === null) {
