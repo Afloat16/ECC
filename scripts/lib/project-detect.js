@@ -317,29 +317,46 @@ function getGoDeps(projectDir) {
 }
 
 /**
- * Read Cargo.toml for Rust crate dependencies
- * @param {string} projectDir - Project root directory
+ * Read package identities from the project's own Cargo dependency tables.
+ * @param {string} content - Cargo.toml contents
  * @returns {string[]} Array of crate names
  */
+function getRustDependencyNames(content) {
+  let toml;
+  try {
+    // Keep SessionStart loadable in plugin clones without node_modules.
+    toml = require('@iarna/toml');
+  } catch (error) {
+    if (error.code !== 'MODULE_NOT_FOUND' || !error.message.includes("'@iarna/toml'")) throw error;
+    // Retain the existing best-effort detection when the parser is unavailable.
+    const sections = content.match(/\[(dev-)?dependencies\]([\s\S]*?)(?=\n\[|$)/g) || [];
+    return sections.flatMap(section => section.split('\n')
+      .map(line => line.match(/^([a-zA-Z0-9_-]+)\s*=/)?.[1]).filter(Boolean));
+  }
+
+  const manifest = toml.parse(content);
+  const deps = [];
+  for (const section of [manifest.dependencies, manifest['dev-dependencies']]) {
+    if (!section || typeof section !== 'object' || Array.isArray(section)) continue;
+    for (const [alias, declaration] of Object.entries(section)) {
+      if (typeof declaration === 'string') {
+        deps.push(alias);
+      } else if (declaration && typeof declaration === 'object' && !Array.isArray(declaration)) {
+        // Cargo's `package` names the actual crate; the table key is only its local alias.
+        const name = declaration.package === undefined ? alias : declaration.package;
+        if (typeof name === 'string' && name.length > 0) deps.push(name);
+      }
+    }
+  }
+  return deps;
+}
+
+/** Read Cargo.toml for Rust crate dependencies. */
 function getRustDeps(projectDir) {
   try {
     const cargoPath = path.join(projectDir, 'Cargo.toml');
     if (!fs.existsSync(cargoPath)) return [];
-    const content = fs.readFileSync(cargoPath, 'utf8');
-    const deps = [];
-    // Match [dependencies] and [dev-dependencies] sections
-    const sections = content.match(/\[(dev-)?dependencies\]([\s\S]*?)(?=\n\[|$)/g);
-    if (sections) {
-      sections.forEach(section => {
-        section.split('\n').forEach(line => {
-          const match = line.match(/^([a-zA-Z0-9_-]+)\s*=/);
-          if (match && !line.startsWith('[')) {
-            deps.push(match[1]);
-          }
-        });
-      });
-    }
-    return deps;
+    return getRustDependencyNames(fs.readFileSync(cargoPath, 'utf8'));
   } catch {
     return [];
   }
