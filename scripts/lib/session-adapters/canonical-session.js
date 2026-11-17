@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -13,11 +14,21 @@ function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function sanitizePathSegment(value) {
+function legacyPathSegment(value) {
   return String(value || 'unknown')
     .trim()
     .replace(/[^A-Za-z0-9._-]+/g, '_')
     .replace(/^_+|_+$/g, '') || 'unknown';
+}
+
+function sanitizePathSegment(value) {
+  const original = String(value);
+  const stem = legacyPathSegment(original);
+  if (stem === original && stem !== '.' && stem !== '..') return stem;
+  // The old alphabet excludes '~', so a literal identifier cannot alias a
+  // generated name without receiving its own identity suffix.
+  const identity = crypto.createHash('sha256').update(original).digest('hex').slice(0, 16);
+  return `${stem.slice(0, 64)}~${identity}`;
 }
 
 function parseContextSeedPaths(context) {
@@ -297,10 +308,44 @@ function readExistingRecording(filePath) {
   }
 }
 
+function recordingMatchesIdentity(recording, snapshot) {
+  const matches = value => value?.adapterId === snapshot.adapterId
+    && value?.session?.id === snapshot.session.id;
+  return recording?.schemaVersion === SESSION_RECORDING_SCHEMA_VERSION
+    && recording.adapterId === snapshot.adapterId
+    && recording.sessionId === snapshot.session.id
+    && matches(recording.latest)
+    && Array.isArray(recording.history)
+    && recording.history.every(entry => matches(entry?.snapshot));
+}
+
+function previousRecording(snapshot, options, filePath) {
+  const existing = readExistingRecording(filePath);
+  if (existing !== null) {
+    if (!recordingMatchesIdentity(existing, snapshot)) {
+      throw new Error('Existing session recording identity does not match the current snapshot');
+    }
+    return { recording: existing, inheritedLegacy: false };
+  }
+
+  const root = resolveRecordingDir(options);
+  const legacyPath = path.join(root, legacyPathSegment(snapshot.adapterId), `${legacyPathSegment(snapshot.session.id)}.json`);
+  const relative = path.relative(root, legacyPath);
+  if (legacyPath === filePath || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    return { recording: null, inheritedLegacy: false };
+  }
+  const legacy = readExistingRecording(legacyPath);
+  // Never copy a history already mixed by the old lossy path mapping. Leave
+  // the original file untouched, including when publication of the copy fails.
+  return recordingMatchesIdentity(legacy, snapshot)
+    ? { recording: legacy, inheritedLegacy: true }
+    : { recording: null, inheritedLegacy: false };
+}
+
 function writeFallbackSessionRecording(snapshot, options = {}) {
   const filePath = getFallbackSessionRecordingPath(snapshot, options);
   const recordedAt = new Date().toISOString();
-  const existing = readExistingRecording(filePath);
+  const { recording: existing, inheritedLegacy } = previousRecording(snapshot, options, filePath);
   const snapshotChanged = !existing
     || JSON.stringify(existing.latest) !== JSON.stringify(snapshot);
 
@@ -321,7 +366,8 @@ function writeFallbackSessionRecording(snapshot, options = {}) {
   };
 
   writeFileAtomic(filePath, JSON.stringify(payload, null, 2) + '\n', {
-    mode: 0o666,
+    // A migrated copy must not widen access to a private legacy recording.
+    mode: inheritedLegacy ? 0o600 : 0o666,
     preserveExistingMode: true
   });
 

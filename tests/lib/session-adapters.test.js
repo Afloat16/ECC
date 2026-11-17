@@ -811,8 +811,9 @@ test('fallback recordings sanitize paths, use env dirs, and preserve changed his
       session: { id: 'session id/with:chars' }
     });
     const recordingPath = getFallbackSessionRecordingPath(first);
-    assert.ok(recordingPath.includes(`${path.sep}adapter_with_spaces${path.sep}`));
-    assert.ok(recordingPath.endsWith(`${path.sep}session_id_with_chars.json`));
+    assert.strictEqual(path.dirname(path.dirname(recordingPath)), recordingDir);
+    assert.match(path.basename(path.dirname(recordingPath)), /^[A-Za-z0-9._~-]+$/);
+    assert.match(path.basename(recordingPath), /^[A-Za-z0-9._~-]+\.json$/);
 
     fs.mkdirSync(path.dirname(recordingPath), { recursive: true });
     fs.writeFileSync(recordingPath, '{not json', 'utf8');
