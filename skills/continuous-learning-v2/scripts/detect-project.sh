@@ -75,12 +75,19 @@ _clv2_normalize_remote_url() {
   fi
 }
 
+# Keep inherited Git hook selectors from redirecting project-local queries.
+# A subshell preserves the caller's environment when this file is sourced.
+_clv2_git() (
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
+  git "$@"
+)
+
 _clv2_main_worktree_root() {
   local root="$1"
   [ -z "$root" ] && return 0
   command -v git >/dev/null 2>&1 || return 0
 
-  git -C "$root" worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
+  _clv2_git -C "$root" worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
     case "$line" in
       worktree\ *)
         printf '%s\n' "${line#worktree }"
@@ -108,7 +115,7 @@ _clv2_detect_project() {
   # 1. Try CLAUDE_PROJECT_DIR env var (explicit override)
   if [ -n "$CLAUDE_PROJECT_DIR" ] && [ -d "$CLAUDE_PROJECT_DIR" ]; then
     if command -v git &>/dev/null; then
-      project_root=$(git -C "$CLAUDE_PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || true)
+      project_root=$(_clv2_git -C "$CLAUDE_PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || true)
       if [ -n "$project_root" ]; then
         source_hint="env"
       fi
@@ -127,7 +134,7 @@ _clv2_detect_project() {
 
   # 2. Try git repo root from CWD (only if git is available)
   if [ -z "$project_root" ] && command -v git &>/dev/null; then
-    project_root=$(git rev-parse --show-toplevel 2>/dev/null || true)
+    project_root=$(_clv2_git rev-parse --show-toplevel 2>/dev/null || true)
     if [ -n "$project_root" ]; then
       source_hint="git"
     fi
@@ -155,7 +162,7 @@ _clv2_detect_project() {
   local remote_url=""
   if command -v git &>/dev/null; then
     if [ "$source_hint" = "git" ] || [ -e "${project_root}/.git" ]; then
-      remote_url=$(git -C "$project_root" remote get-url origin 2>/dev/null || true)
+      remote_url=$(_clv2_git -C "$project_root" remote get-url origin 2>/dev/null || true)
     fi
   fi
 

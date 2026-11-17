@@ -42,8 +42,14 @@ function readProjectRegistry() {
 }
 
 function runGit(args, cwd) {
+  // Git hook selectors must not override the project we are inspecting.
+  const env = { ...process.env };
+  for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_PREFIX']) {
+    delete env[key];
+  }
   const result = spawnSync('git', args, {
     cwd,
+    env,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore']
   });

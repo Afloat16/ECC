@@ -93,6 +93,60 @@ test('getHomunculusDir ignores relative overrides and uses XDG_DATA_HOME', () =>
   }
 });
 
+for (const explicit of [false, true]) {
+  for (const withRemote of [false, true]) {
+    test(`project identity ignores inherited Git selectors (explicit=${explicit}, remote=${withRemote})`, () => {
+      const root = createTempDir();
+      try {
+        const target = path.join(root, 'target');
+        const foreign = path.join(root, 'foreign');
+        const storage = path.join(root, 'store');
+        initRepo(foreign, 'https://example.invalid/foreign/project.git');
+        initRepo(target, 'https://example.invalid/intended/project.git');
+        if (!withRemote) {
+          const result = spawnSync('git', ['remote', 'remove', 'origin'], { cwd: target });
+          assert.strictEqual(result.status, 0);
+        }
+        const child = path.join(target, 'nested');
+        fs.mkdirSync(child);
+        const inherited = {
+          GIT_DIR: path.join(foreign, '.git'),
+          GIT_WORK_TREE: foreign,
+          GIT_COMMON_DIR: path.join(foreign, '.git'),
+          GIT_INDEX_FILE: path.join(foreign, '.git', 'index'),
+          GIT_PREFIX: 'foreign-prefix/',
+          CLAUDE_PROJECT_DIR: explicit ? target : undefined,
+          CLV2_HOMUNCULUS_DIR: storage,
+          XDG_DATA_HOME: undefined,
+        };
+        withEnv(inherited, () => {
+          const result = resolveProjectContext(child);
+          assert.strictEqual(result.projectRoot, fs.realpathSync(target));
+          const expectedId = hashId(withRemote ? 'example.invalid/intended/project' : fs.realpathSync(target));
+          assert.strictEqual(result.projectId, expectedId);
+          assert.strictEqual(result.projectDir, path.join(storage, 'projects', expectedId));
+          for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_PREFIX']) {
+            assert.strictEqual(process.env[key], inherited[key], `${key} must remain available to the caller`);
+          }
+          if (process.platform !== 'win32') {
+            const script = path.resolve(__dirname, '../../skills/continuous-learning-v2/scripts/detect-project.sh');
+            const shell = spawnSync('bash', ['-c', 'source "$1"; printf "%s\\n" "$PROJECT_ROOT" "$PROJECT_ID" "$GIT_DIR" "$GIT_WORK_TREE" "$GIT_COMMON_DIR" "$GIT_INDEX_FILE" "$GIT_PREFIX"', 'observer-scope-test', script], {
+              cwd: child, env: process.env, encoding: 'utf8', timeout: 10000
+            });
+            assert.strictEqual(shell.status, 0, shell.stderr);
+            assert.deepStrictEqual(shell.stdout.trimEnd().split('\n'), [fs.realpathSync(target), expectedId, inherited.GIT_DIR, inherited.GIT_WORK_TREE, inherited.GIT_COMMON_DIR, inherited.GIT_INDEX_FILE, inherited.GIT_PREFIX]);
+            const registry = JSON.parse(fs.readFileSync(path.join(storage, 'projects.json'), 'utf8'));
+            assert.strictEqual(registry[expectedId].root, fs.realpathSync(target));
+            assert.strictEqual(Object.values(registry).some(entry => entry.root === foreign), false);
+          }
+        });
+      } finally {
+        cleanup(root);
+      }
+    });
+  }
+}
+
 test('normalizeRemoteUrl collapses common network remote variants', () => {
   const expected = 'github.com/owner/repo';
   assert.strictEqual(normalizeRemoteUrl('git@github.com:Owner/Repo.git'), expected);
