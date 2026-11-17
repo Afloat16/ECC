@@ -3,6 +3,7 @@
 const assert = require('assert');
 
 const { filterMcpConfig, parseDisabledMcpServers } = require('../../scripts/lib/mcp-config');
+const { deepMergeJson, deepRemoveJsonSubset } = require('../../scripts/lib/install/json-ops');
 
 function test(name, fn) {
   try {
@@ -53,6 +54,34 @@ function runTests() {
 
     assert.deepStrictEqual(result.removed, []);
     assert.deepStrictEqual(Object.keys(result.config.mcpServers), ['github']);
+  })) passed++; else failed++;
+
+  if (test('MCP filtering preserves literal JSON keys without mutating the input', () => {
+    const servers = Object.freeze(JSON.parse('{"__proto__":{"command":"custom"},"constructor":{"command":"other"},"disabled":{}}'));
+    const config = Object.freeze({ mcpServers: servers });
+    const filtered = filterMcpConfig(config, ['disabled']).config.mcpServers;
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(filtered)), JSON.parse('{"__proto__":{"command":"custom"},"constructor":{"command":"other"}}'));
+    assert.strictEqual(Object.getPrototypeOf(filtered), Object.prototype);
+    assert.ok(Object.hasOwn(servers, 'disabled'));
+    assert.deepStrictEqual(filterMcpConfig(config, ['__proto__']).removed, ['__proto__']);
+    assert.ok(!Object.hasOwn(filterMcpConfig(config, ['__proto__']).config.mcpServers, '__proto__'));
+  })) passed++; else failed++;
+
+  if (test('JSON merges round-trip prototype-named values and retain user-owned nested fields', () => {
+    for (const value of [null, 3, 'literal', ['entry'], { command: 'custom' }]) {
+      const patch = Object.fromEntries([['__proto__', value]]);
+      const merged = deepMergeJson({ preserved: true }, patch);
+      assert.deepStrictEqual(JSON.parse(JSON.stringify(merged)), { preserved: true, ...patch });
+      assert.strictEqual(Object.getPrototypeOf(merged), Object.prototype);
+      assert.deepStrictEqual(deepRemoveJsonSubset(merged, patch), { preserved: true });
+    }
+    const base = JSON.parse('{"mcpServers":{"__proto__":{"env":{"USER_SETTING":"keep"}}}}');
+    const patch = JSON.parse('{"mcpServers":{"__proto__":{"command":"custom"}}}');
+    const before = JSON.stringify(base);
+    const merged = deepMergeJson(base, patch);
+    assert.deepStrictEqual(merged.mcpServers.__proto__, { env: { USER_SETTING: 'keep' }, command: 'custom' });
+    assert.deepStrictEqual(deepRemoveJsonSubset(merged, patch), base);
+    assert.strictEqual(JSON.stringify(base), before);
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

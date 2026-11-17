@@ -30,15 +30,14 @@ function filterMcpConfig(config, disabledServerNames = []) {
     };
   }
 
-  const nextServers = {};
+  const nextServers = { ...servers };
   const removed = [];
 
-  for (const [name, serverConfig] of Object.entries(servers)) {
+  for (const name of Object.keys(servers)) {
     if (disabled.has(name)) {
       removed.push(name);
-      continue;
+      delete nextServers[name];
     }
-    nextServers[name] = serverConfig;
   }
 
   return {

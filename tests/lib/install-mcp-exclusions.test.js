@@ -78,6 +78,7 @@ function createFixture(t, { allExcluded = false, userConfig = false } = {}) {
     includeComponentIds: [], excludeComponentIds: [], hookConsent: 'declined',
   }, options);
   return {
+    sourceRoot,
     configPath,
     statePath,
     plan,
@@ -113,6 +114,35 @@ function assertRecordedPayload(fixture, expectedServers) {
   ));
   assert.ok(operation, 'The installed JSON merge must remain tracked');
   assert.deepEqual(operation.mergePayload, { mcpServers: expectedServers });
+}
+
+for (const name of ['__proto__', 'constructor', 'hasOwnProperty']) {
+  for (const exclude of [false, true]) {
+    test(`MCP lifecycle preserves literal server name ${name}, exclusions=${exclude}`, t => {
+      const fixture = createFixture(t);
+      const servers = Object.fromEntries([[name, INCLUDED_SERVER], ['excluded', EXCLUDED_SERVER]]);
+      writeJson(path.join(fixture.sourceRoot, '.mcp.json'), { mcpServers: servers });
+      fixture.writeConfig({ mcpServers: { custom: USER_SERVER } });
+      if (exclude) installWithExclusion(fixture);
+      else fixture.install();
+      const installed = fixture.readConfig();
+      assert.ok(Object.hasOwn(installed.mcpServers, name));
+      assert.deepEqual(installed.mcpServers[name], INCLUDED_SERVER);
+      assert.deepEqual(installed.mcpServers.custom, USER_SERVER);
+      assertRecordedPayload(fixture, Object.fromEntries(Object.entries(servers).filter(([key]) => !exclude || key !== 'excluded')));
+      assert.equal(lifecycleResult(fixture.doctor()).status, 'ok');
+
+      // Repair restores only the managed server fields, retaining user additions.
+      installed.mcpServers[name] = { env: { USER_SETTING: 'keep' } };
+      fixture.writeConfig(installed);
+      assert.ok(lifecycleResult(fixture.repair()).repairedPaths.includes(fixture.configPath));
+      assert.deepEqual(fixture.readConfig().mcpServers[name], { ...INCLUDED_SERVER, env: { USER_SETTING: 'keep' } });
+      assert.equal(lifecycleResult(fixture.uninstall()).status, 'uninstalled');
+      assert.deepEqual(fixture.readConfig(), {
+        mcpServers: { custom: USER_SERVER, [name]: { env: { USER_SETTING: 'keep' } } },
+      });
+    });
+  }
 }
 
 test('repair preserves MCP exclusions without the installation environment', t => {

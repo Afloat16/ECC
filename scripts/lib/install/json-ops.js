@@ -89,11 +89,16 @@ function deepMergeJson(baseValue, patchValue) {
 
   const merged = { ...baseValue };
   for (const [key, value] of Object.entries(patchValue)) {
-    if (isPlainObject(value) && isPlainObject(merged[key])) {
-      merged[key] = deepMergeJson(merged[key], value);
-    } else {
-      merged[key] = cloneJsonValue(value);
-    }
+    const previous = Object.hasOwn(merged, key) ? merged[key] : undefined;
+    // JSON keys are data, including names that Object.prototype defines.
+    Object.defineProperty(merged, key, {
+      value: isPlainObject(value) && isPlainObject(previous)
+        ? deepMergeJson(previous, value)
+        : cloneJsonValue(value),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
   return merged;
 }
