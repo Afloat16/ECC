@@ -14,6 +14,8 @@ const { renderControlPlaneViewHtml } = require('./control-plane-view-ui');
 const { createControlPlaneViewSource } = require('./control-plane-view');
 const { runWorkItemMutation } = require('./work-item-runner');
 
+const MAX_REQUEST_BODY_BYTES = 1024 * 1024;
+
 // Host/Origin gating lives in scripts/lib/loopback-guard.js so every ECC
 // loopback server shares one hardened implementation; re-exported below to
 // keep this module's public API stable.
@@ -90,9 +92,32 @@ function sendText(res, statusCode, body, contentType = 'text/plain; charset=utf-
   res.end(body);
 }
 
+function requestBodyLimitError() {
+  const error = new Error(`Request body exceeds the ${MAX_REQUEST_BODY_BYTES}-byte limit.`);
+  error.code = 'REQUEST_BODY_TOO_LARGE';
+  return error;
+}
+
+function sendRequestError(req, res, error) {
+  const oversized = error.code === 'REQUEST_BODY_TOO_LARGE';
+  if (oversized) res.setHeader('connection', 'close');
+  sendJson(res, oversized ? 413 : 500, { ok: false, error: error.message });
+  if (oversized) req.resume();
+}
+
 async function readRequestJson(req) {
+  if (Number(req.headers['content-length']) > MAX_REQUEST_BODY_BYTES) {
+    throw requestBodyLimitError();
+  }
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let bytes = 0;
+  // Keep the socket writable when rejecting an unfinished upload so the
+  // caller receives the HTTP error before the connection is closed.
+  for await (const chunk of req.iterator({ destroyOnReturn: false })) {
+    bytes += chunk.length;
+    if (bytes > MAX_REQUEST_BODY_BYTES) throw requestBodyLimitError();
+    chunks.push(chunk);
+  }
   if (chunks.length === 0) return {};
   const raw = Buffer.concat(chunks).toString('utf8').trim();
   if (!raw) return {};
@@ -350,10 +375,7 @@ function createControlPaneServer(options = {}) {
 
       sendJson(res, 404, { ok: false, error: 'not found' });
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error.message
-      });
+      sendRequestError(req, res, error);
     }
   });
 
