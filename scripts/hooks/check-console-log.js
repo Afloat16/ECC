@@ -15,7 +15,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { isGitRepo, getGitModifiedFiles, readFile, log, runCommand } = require('../lib/utils');
+const { execFileSync } = require('child_process');
+const { isGitRepo, getGitModifiedFiles, readFile, log } = require('../lib/utils');
 
 // Files where console.log is expected and should not trigger warnings
 const EXCLUDED_PATTERNS = [
@@ -82,7 +83,11 @@ process.stdin.on('end', () => {
 
     // git reports paths from the repository root, and the session can run in a
     // subdirectory of it, so read each file from the root.
-    const root = runCommand('git rev-parse --show-toplevel', gitOptions).output;
+    // Remove only Git's output terminator: trailing whitespace can belong to
+    // the directory name and must survive the filesystem lookup.
+    const root = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      ...gitOptions, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']
+    }).replace(/\n$/, '');
     const files = getGitModifiedFiles(['\\.tsx?$', '\\.jsx?$'], gitOptions)
       .filter(f => fs.existsSync(path.join(root, f)))
       .filter(f => !EXCLUDED_PATTERNS.some(pattern => pattern.test(f)));
