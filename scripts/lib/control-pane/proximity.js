@@ -77,7 +77,13 @@ function parseDiffRanges(diff) {
 }
 
 function runGit(worktreePath, args) {
+  // Hook-provided selectors override -C and can route a session probe to the host repo.
+  const env = { ...process.env };
+  for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_PREFIX']) {
+    delete env[key];
+  }
   return execFileSync('git', ['-C', worktreePath, ...args], {
+    env,
     encoding: 'utf8',
     timeout: 5000,
     maxBuffer: 8 * 1024 * 1024,
