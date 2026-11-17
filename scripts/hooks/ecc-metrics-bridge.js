@@ -13,7 +13,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { sanitizeSessionId, readBridge, writeBridgeAtomic } = require('../lib/session-bridge');
+const { sanitizeSessionId, updateBridgeAtomic } = require('../lib/session-bridge');
 const {
   readSessionCostSnapshot,
   warnSessionCostSnapshotFailure
@@ -215,53 +215,55 @@ function run(rawInput) {
 
     if (!sessionId) return rawInput;
 
-    const now = new Date().toISOString();
-    const bridge = readBridge(sessionId) || {
-      session_id: sessionId,
-      total_cost_usd: 0,
-      total_input_tokens: 0,
-      total_output_tokens: 0,
-      tool_count: 0,
-      files_modified_count: 0,
-      files_modified: [],
-      recent_tools: [],
-      first_timestamp: now,
-      last_timestamp: now,
-      context_remaining_pct: null
-    };
+    updateBridgeAtomic(sessionId, current => {
+      const now = new Date().toISOString();
+      const bridge = { ...(current || {
+        session_id: sessionId,
+        total_cost_usd: 0,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        tool_count: 0,
+        files_modified_count: 0,
+        files_modified: [],
+        recent_tools: [],
+        first_timestamp: now,
+        last_timestamp: now,
+        context_remaining_pct: null
+      }) };
 
-    // Increment tool count
-    bridge.tool_count = (bridge.tool_count || 0) + 1;
-    bridge.last_timestamp = now;
-    if (!bridge.first_timestamp) bridge.first_timestamp = now;
+      // Increment tool count
+      bridge.tool_count = (bridge.tool_count || 0) + 1;
+      bridge.last_timestamp = now;
+      if (!bridge.first_timestamp) bridge.first_timestamp = now;
 
-    // Track modified files, including notebooks edited through NotebookEdit.
-    const isWriteOp = /^(Write|Edit|MultiEdit|NotebookEdit)$/i.test(toolName);
-    if (isWriteOp) {
-      const newPaths = extractFilePaths(toolName, toolInput);
-      const existing = new Set(bridge.files_modified || []);
-      for (const p of newPaths) {
-        if (existing.size < MAX_FILES_TRACKED && !existing.has(p)) {
-          existing.add(p);
+      // Track modified files, including notebooks edited through NotebookEdit.
+      const isWriteOp = /^(Write|Edit|MultiEdit|NotebookEdit)$/i.test(toolName);
+      if (isWriteOp) {
+        const newPaths = extractFilePaths(toolName, toolInput);
+        const existing = new Set(bridge.files_modified || []);
+        for (const p of newPaths) {
+          if (existing.size < MAX_FILES_TRACKED && !existing.has(p)) {
+            existing.add(p);
+          }
         }
+        bridge.files_modified = [...existing];
+        bridge.files_modified_count = existing.size;
       }
-      bridge.files_modified = [...existing];
-      bridge.files_modified_count = existing.size;
-    }
 
-    // Ring buffer for loop detection
-    const recent = bridge.recent_tools || [];
-    recent.push({ tool: toolName, hash: hashToolCall(toolName, toolInput) });
-    if (recent.length > RECENT_TOOLS_SIZE) recent.shift();
-    bridge.recent_tools = recent;
+      // Ring buffer for loop detection
+      const recent = [...(bridge.recent_tools || [])];
+      recent.push({ tool: toolName, hash: hashToolCall(toolName, toolInput) });
+      if (recent.length > RECENT_TOOLS_SIZE) recent.shift();
+      bridge.recent_tools = recent;
 
-    // Use the O(1) session snapshot, with JSONL compatibility fallback.
-    const costs = readSessionCost(sessionId);
-    bridge.total_cost_usd = Math.round(costs.totalCost * 1e6) / 1e6;
-    bridge.total_input_tokens = costs.totalIn;
-    bridge.total_output_tokens = costs.totalOut;
+      // Use the O(1) session snapshot, with JSONL compatibility fallback.
+      const costs = readSessionCost(sessionId);
+      bridge.total_cost_usd = Math.round(costs.totalCost * 1e6) / 1e6;
+      bridge.total_input_tokens = costs.totalIn;
+      bridge.total_output_tokens = costs.totalOut;
 
-    writeBridgeAtomic(sessionId, bridge);
+      return bridge;
+    });
   } catch {
     // Never block tool execution
   }

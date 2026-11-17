@@ -13,7 +13,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { sanitizeSessionId, readBridge, writeBridgeAtomic } = require('../lib/session-bridge');
+const { sanitizeSessionId, readBridge, updateBridgeAtomic } = require('../lib/session-bridge');
 
 const AUTO_COMPACT_BUFFER_PCT = 16.5;
 const MAX_STDIN = 1024 * 1024;
@@ -177,13 +177,14 @@ function runStatusline() {
       const remaining = data.context_window?.remaining_percentage;
 
       const sessionId = sanitizeSessionId(session);
-      const bridge = sessionId ? readBridge(sessionId) : null;
+      let bridge = sessionId ? readBridge(sessionId) : null;
 
       // Write context % back to bridge for context-monitor
       if (sessionId && bridge && remaining !== null && remaining !== undefined) {
-        bridge.context_remaining_pct = remaining;
         try {
-          writeBridgeAtomic(sessionId, bridge);
+          bridge = updateBridgeAtomic(sessionId, current => current
+            ? { ...current, context_remaining_pct: remaining }
+            : null) || bridge;
         } catch {
           /* best effort */
         }

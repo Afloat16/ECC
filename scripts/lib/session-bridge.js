@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { acquireSettingsLock } = require('./install/claude-settings-lock');
 
 const MAX_SESSION_ID_LENGTH = 64;
 
@@ -84,6 +85,24 @@ function writeBridgeAtomic(sessionId, data) {
 }
 
 /**
+ * Serialize a bridge read/modify/write across cooperating hook processes.
+ * Returning null leaves the bridge unchanged. Keep the wait bounded so callers
+ * can retain their best-effort behavior if another process holds the lock.
+ */
+function updateBridgeAtomic(sessionId, update) {
+  const release = acquireSettingsLock(getBridgePath(sessionId), {
+    label: 'session bridge', timeoutMs: 1000
+  });
+  try {
+    const next = update(readBridge(sessionId));
+    if (next !== null) writeBridgeAtomic(sessionId, next);
+    return next;
+  } finally {
+    release();
+  }
+}
+
+/**
  * Replace a file via rename, retrying briefly on transient OS-level errors.
  *
  * POSIX `rename(2)` is atomic between source and destination, so concurrent
@@ -142,6 +161,7 @@ module.exports = {
   getBridgePath,
   readBridge,
   writeBridgeAtomic,
+  updateBridgeAtomic,
   renameWithRetry,
   resolveSessionId,
   MAX_SESSION_ID_LENGTH
