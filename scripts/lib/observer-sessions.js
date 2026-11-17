@@ -41,14 +41,68 @@ function readProjectRegistry() {
   }
 }
 
-function runGit(args, cwd) {
+function runGit(args, cwd, env) {
   const result = spawnSync('git', args, {
     cwd,
+    env,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore']
   });
   if (result.status !== 0) return '';
   return (result.stdout || '').trim();
+}
+
+function gitEnvironments() {
+  const pathKeys = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE'];
+  const localKeys = [...pathKeys, 'GIT_PREFIX'];
+  const original = {};
+  const clean = {};
+  let hasLocalContext = false;
+  let hasWorkTree = false;
+  for (const [key, value] of Object.entries(process.env)) {
+    const name = process.platform === 'win32' ? key.toUpperCase() : key;
+    // Subprocesses run in several directories. Resolve inherited paths once,
+    // relative to the caller, without changing the caller's environment.
+    original[key] = pathKeys.includes(name) && value ? path.resolve(value) : value;
+    if (localKeys.includes(name)) {
+      hasLocalContext = true;
+      if (name === 'GIT_WORK_TREE') hasWorkTree = true;
+    } else {
+      clean[key] = value;
+    }
+  }
+  return { original, clean, hasLocalContext, hasWorkTree };
+}
+
+function resolveGitEnvironment(cwd) {
+  const { original, clean, hasLocalContext, hasWorkTree } = gitEnvironments();
+  if (!hasLocalContext) return original;
+  const explicitRoot = process.env.CLAUDE_PROJECT_DIR;
+  const requested = path.resolve(explicitRoot && fs.existsSync(explicitRoot) ? explicitRoot : cwd);
+  if (fs.existsSync(path.join(requested, '.git'))) return clean;
+
+  // A worktree may be registered only through GIT_DIR/core.worktree. Retain
+  // that context only inside its root and without crossing another checkout.
+  const environmentRoot = canonicalProjectRoot(runGit(['rev-parse', '--show-toplevel'], requested, original));
+  let current = canonicalProjectRoot(requested);
+  if (!environmentRoot || !current) return clean;
+  for (;;) {
+    const relative = path.relative(environmentRoot, current);
+    if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return clean;
+    if (fs.existsSync(path.join(current, '.git'))) return clean;
+    if (relative === '') break;
+    const parent = path.dirname(current);
+    if (parent === current) return clean;
+    current = parent;
+  }
+
+  // GIT_DIR alone defaults its worktree to the command's cwd. Prefer a real
+  // checkout discovered there, but preserve explicitly configured worktrees,
+  // even when they are nested inside another repository.
+  const configuredWorktree = hasWorkTree
+    || runGit(['config', '--name-only', '--get-regexp', '^core[.]worktree$'], requested, original);
+  if (!configuredWorktree && runGit(['rev-parse', '--show-toplevel'], requested, clean)) return clean;
+  return original;
 }
 
 function stripRemoteCredentials(remoteUrl) {
@@ -73,28 +127,28 @@ function normalizeRemoteUrl(remoteUrl) {
   return normalized;
 }
 
-function resolveProjectRoot(cwd = process.cwd()) {
+function resolveProjectRoot(cwd, gitEnv) {
   const envRoot = process.env.CLAUDE_PROJECT_DIR;
   if (envRoot && fs.existsSync(envRoot)) {
     return path.resolve(envRoot);
   }
 
-  const gitRoot = runGit(['rev-parse', '--show-toplevel'], cwd);
+  const gitRoot = runGit(['rev-parse', '--show-toplevel'], cwd, gitEnv);
   if (gitRoot) return path.resolve(gitRoot);
 
   return '';
 }
 
-function resolveMainWorktreeRoot(projectRoot) {
-  const listing = runGit(['worktree', 'list', '--porcelain'], projectRoot);
+function resolveMainWorktreeRoot(projectRoot, gitEnv) {
+  const listing = runGit(['worktree', 'list', '--porcelain'], projectRoot, gitEnv);
   const line = listing.split(/\r?\n/).find(entry => entry.startsWith('worktree '));
   return line ? line.slice('worktree '.length) : '';
 }
 
-function computeProjectId(projectRoot) {
-  const remoteUrl = stripRemoteCredentials(runGit(['remote', 'get-url', 'origin'], projectRoot));
+function computeProjectId(projectRoot, gitEnv) {
+  const remoteUrl = stripRemoteCredentials(runGit(['remote', 'get-url', 'origin'], projectRoot, gitEnv));
   // Same fallback as detect-project.sh: a remote-free linked worktree shares its main checkout's id.
-  const hashInput = normalizeRemoteUrl(remoteUrl) || remoteUrl || resolveMainWorktreeRoot(projectRoot) || projectRoot;
+  const hashInput = normalizeRemoteUrl(remoteUrl) || remoteUrl || resolveMainWorktreeRoot(projectRoot, gitEnv) || projectRoot;
   return crypto.createHash('sha256').update(hashInput).digest('hex').slice(0, 12);
 }
 
@@ -123,8 +177,8 @@ function isSafeProjectId(projectId) {
  * path. The current merge CLI deletes the source directory, including live
  * observer state and files it does not copy, so SessionStart must not suggest it.
  */
-function pickRootProjectId(entries, projectRoot) {
-  const computedId = computeProjectId(projectRoot);
+function pickRootProjectId(entries, projectRoot, gitEnv) {
+  const computedId = computeProjectId(projectRoot, gitEnv);
   const ids = [...new Set(entries.map(entry => entry.id))];
   const lastSeen = entry => Date.parse(entry.last_seen || '') || 0;
   let chosenId;
@@ -162,7 +216,8 @@ function canonicalProjectRoot(root) {
 }
 
 function resolveProjectContext(cwd = process.cwd()) {
-  const projectRoot = resolveProjectRoot(cwd);
+  const gitEnv = resolveGitEnvironment(cwd);
+  const projectRoot = resolveProjectRoot(cwd, gitEnv);
   if (!projectRoot) {
     const projectDir = getHomunculusDir();
     ensureDir(projectDir);
@@ -174,8 +229,8 @@ function resolveProjectContext(cwd = process.cwd()) {
   const rootEntries = Object.values(registry).filter(entry => entry && isSafeProjectId(entry.id)
     && canonicalRoot && canonicalProjectRoot(entry.root) === canonicalRoot);
   const projectId = rootEntries.length > 0
-    ? pickRootProjectId(rootEntries, projectRoot)
-    : computeProjectId(projectRoot);
+    ? pickRootProjectId(rootEntries, projectRoot, gitEnv)
+    : computeProjectId(projectRoot, gitEnv);
   const projectDir = path.join(getProjectsDir(), projectId);
   ensureDir(projectDir);
   const aliasProjectIds = [...new Set(rootEntries.map(entry => entry.id))].filter(id => id !== projectId);
