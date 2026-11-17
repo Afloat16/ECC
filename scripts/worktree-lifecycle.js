@@ -55,7 +55,7 @@ function usage() {
     'conflicts without touching the working tree (git merge-tree) and proposes',
     'a safe cleanup plan that never removes dirty or unmerged worktrees.',
     '',
-    'Requires Git 2.36+ for NUL-delimited worktree paths.',
+    'Requires Git 2.38+ for merge prediction and NUL-delimited worktree paths.',
     '',
     'Options:',
     '  --json            Print the full ecc.worktree-lifecycle.v1 report as JSON',

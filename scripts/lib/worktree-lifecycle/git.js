@@ -120,27 +120,24 @@ function createGitRunner(repoRoot, runImpl = defaultRunImpl) {
     },
 
     // Predict merge conflicts WITHOUT touching the working tree using
-    // `git merge-tree`. Prefers the modern --write-tree form (Git 2.38+),
-    // which exits non-zero and lists conflicted paths on conflict.
+    // `git merge-tree --write-tree` (Git 2.38+). Only exit codes 0 and 1
+    // with a tree oid describe a merge; other results cannot classify it.
     predictMergeConflicts(branch, baseBranch) {
       const modern = run(['merge-tree', '--write-tree', '--name-only', baseBranch, branch]);
+      const treeOid = (modern.stdout || '').split('\n', 1)[0].trim();
+      if ((modern.status !== 0 && modern.status !== 1)
+          || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(treeOid)) {
+        const reason = (modern.stderr || '').trim() || `git exited with status ${modern.status} and no valid merge result`;
+        throw new Error(`Unable to predict merge conflicts safely (Git 2.38+ with --write-tree required): ${reason}`);
+      }
       if (modern.status === 0) {
         return { conflicted: false, files: [], method: 'merge-tree' };
       }
 
-      // Non-zero with parseable output => real conflict (modern form).
-      if (modern.stdout && /\S/.test(modern.stdout)) {
-        const lines = modern.stdout.split('\n').map(l => l.trim()).filter(Boolean);
-        // First line is the tree oid; subsequent lines are conflicted paths.
-        const files = lines.slice(1).filter(line => !/^[0-9a-f]{40}$/i.test(line));
-        return { conflicted: true, files, method: 'merge-tree' };
-      }
-
-      // Fallback to the legacy form (older Git): conflict markers in output.
-      const legacy = run(['merge-tree', baseBranch, baseBranch, branch]);
-      const hasMarkers = /^<{7}|^={7}|^>{7}/m.test(legacy.stdout || '')
-        || /\+<{7}|changed in both/m.test(legacy.stdout || '');
-      return { conflicted: hasMarkers, files: [], method: 'merge-tree-legacy' };
+      const lines = modern.stdout.split('\n').map(l => l.trim()).filter(Boolean);
+      // First line is the tree oid; subsequent lines are conflicted paths.
+      const files = lines.slice(1).filter(line => !/^[0-9a-f]{40}$/i.test(line));
+      return { conflicted: true, files, method: 'merge-tree' };
     }
   };
 }

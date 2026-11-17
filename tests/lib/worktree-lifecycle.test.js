@@ -5,7 +5,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 const { createGitRunner } = require('../../scripts/lib/worktree-lifecycle/git');
 const {
   STATES,
@@ -99,7 +99,7 @@ test('git.listWorktrees parses porcelain output', () => {
 
 test('git.predictMergeConflicts: clean merge (exit 0) and conflict (exit !=0)', () => {
   const clean = fakeGit('/repo', {
-    'merge-tree --write-tree --name-only main feature': { status: 0, stdout: 'treeoid\n' }
+    'merge-tree --write-tree --name-only main feature': { status: 0, stdout: `${'a'.repeat(40)}\n` }
   });
   assert.strictEqual(clean.predictMergeConflicts('feature', 'main').conflicted, false);
 
@@ -113,6 +113,106 @@ test('git.predictMergeConflicts: clean merge (exit 0) and conflict (exit !=0)', 
   assert.strictEqual(result.conflicted, true);
   assert.deepStrictEqual(result.files, ['src/app.js', 'src/util.js']);
 });
+
+for (const failure of [
+  { status: 0, stdout: '', stderr: '' },
+  { status: 0, stdout: 'truncated output\n', stderr: '' },
+  { status: null, stdout: '', stderr: 'terminated by SIGTERM' },
+  { status: 129, stdout: '', stderr: "error: unknown option `write-tree'" },
+  { status: 128, stdout: '', stderr: 'fatal: unable to read tree' },
+  { status: 1, stdout: '', stderr: 'fatal: unrelated histories' },
+  { status: 1, stdout: 'unexpected command output\n', stderr: '' },
+  { status: 1, stdout: `${'a'.repeat(39)}\nfile.js\n`, stderr: '' },
+  { status: 2, stdout: `${'a'.repeat(40)}\nfile.js\n`, stderr: '' },
+]) {
+  test(`conflict prediction rejects an unavailable result: ${JSON.stringify(failure)}`, () => {
+    const calls = [];
+    const git = createGitRunner('/repo', args => {
+      calls.push(args);
+      return args.includes('--write-tree') ? failure : { status: 0, stdout: '', stderr: '' };
+    });
+    assert.throws(() => git.predictMergeConflicts('feature', 'main'), error =>
+      error.message.includes('Unable to predict merge conflicts safely')
+      && error.message.includes('Git 2.38+')
+      && error.message.includes(failure.stderr || `status ${failure.status}`));
+    assert.strictEqual(calls.length, 1, 'must not substitute a legacy approximation');
+  });
+}
+
+for (const length of [40, 64]) {
+  for (const status of [0, 1]) {
+    test(`conflict prediction accepts a ${length}-character Git tree object id with status ${status}`, () => {
+      const git = createGitRunner('/repo', () => ({
+        status, stdout: `${'a'.repeat(length)}\n${status === 1 ? 'src/conflict.js\n' : ''}`, stderr: ''
+      }));
+      assert.deepStrictEqual(git.predictMergeConflicts('feature', 'main'), {
+        conflicted: status === 1, files: status === 1 ? ['src/conflict.js'] : [], method: 'merge-tree'
+      });
+    });
+  }
+}
+
+for (const kind of ['text', 'binary', 'modify-delete', 'add-add', 'separate-files', 'nonoverlapping']) {
+  test(`real git: unavailable conflict prediction cannot classify a ${kind} branch as merge-ready`, () => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-wl-prediction-')));
+    const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: os.devNull };
+    for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_PREFIX']) delete env[key];
+    const git = args => execFileSync('git', args, { cwd: root, env, encoding: 'utf8' });
+    const commit = message => {
+      git(['add', '-A']);
+      git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+        '-c', 'commit.gpgsign=false', 'commit', '-qm', message]);
+    };
+    try {
+      git(['init', '-q', '-b', 'main']);
+      fs.writeFileSync(path.join(root, 'keep'), 'keep\n');
+      fs.writeFileSync(path.join(root, 'file'), 'a\nb\nc\nd\ne\n');
+      commit('initial');
+      git(['branch', 'feature']);
+      if (kind === 'modify-delete') fs.unlinkSync(path.join(root, 'file'));
+      else if (kind === 'separate-files') fs.writeFileSync(path.join(root, 'left'), 'left\n');
+      else if (kind === 'add-add') fs.writeFileSync(path.join(root, 'new'), 'left\n');
+      else fs.writeFileSync(path.join(root, 'file'), kind === 'binary' ? Buffer.from([0, 1]) : 'LEFT\nb\nc\nd\ne\n');
+      commit('main');
+      const worker = path.join(root, 'worker');
+      git(['worktree', 'add', '-q', worker, 'feature']);
+      const file = path.join(worker, kind === 'separate-files' ? 'right' : kind === 'add-add' ? 'new' : 'file');
+      fs.writeFileSync(file, kind === 'binary' ? Buffer.from([0, 2])
+        : kind === 'nonoverlapping' ? 'a\nb\nc\nd\nRIGHT\n' : 'RIGHT\nb\nc\nd\ne\n');
+      git(['-C', worker, 'add', '-A']);
+      git(['-C', worker, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+        '-c', 'commit.gpgsign=false', 'commit', '-qm', 'feature']);
+      const before = fs.readFileSync(file);
+      const head = git(['-C', worker, 'rev-parse', 'HEAD']);
+      const modern = spawnSync('git', ['merge-tree', '--write-tree', 'main', 'feature'], { cwd: root, env });
+      assert.strictEqual(modern.status, ['separate-files', 'nonoverlapping'].includes(kind) ? 0 : 1);
+      const runner = createGitRunner(root, (args, options) => args.includes('--write-tree')
+        ? { status: 129, stdout: '', stderr: "error: unknown option `write-tree'" }
+        : spawnSync('git', args, { ...options, env, encoding: 'utf8' }));
+      assert.throws(() => buildLifecycleReport(root, { baseBranch: 'main' }, { git: runner }), /Git 2\.38\+/);
+      assert.deepStrictEqual(fs.readFileSync(file), before);
+      assert.strictEqual(git(['-C', worker, 'rev-parse', 'HEAD']), head);
+      assert.strictEqual(git(['-C', worker, 'status', '--porcelain']), '');
+
+      if (kind === 'text') {
+        const cli = spawnSync(process.execPath, ['-e', `
+          const cp = require('child_process');
+          const original = cp.spawnSync;
+          cp.spawnSync = (command, args, options) => command === 'git' && args.includes('--write-tree')
+            ? { status: 129, stdout: '', stderr: 'unsupported --write-tree' }
+            : original(command, args, options);
+          require(process.argv[1]).main(['node', 'worktree-lifecycle', '--repo', process.argv[2], '--cleanup-plan']);
+        `, path.resolve(__dirname, '../../scripts/worktree-lifecycle.js'), root], { env, encoding: 'utf8' });
+        assert.strictEqual(cli.status, 1);
+        assert.strictEqual(cli.stdout, '', 'a failed query must not print a cleanup plan');
+        assert.match(cli.stderr, /Git 2\.38\+/);
+        assert.deepStrictEqual(fs.readFileSync(file), before);
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
 
 test('git.listWorktrees fails instead of returning an empty successful listing', () => {
   for (const result of [
@@ -153,7 +253,7 @@ function fullRepoGit() {
     // ready: 2 ahead, clean merge
     'rev-list --left-right --count main...ready': { stdout: '0\t2\n' },
     'log -1 --format=%ct ready': { stdout: `${recent}\n` },
-    'merge-tree --write-tree --name-only main ready': { status: 0, stdout: 'tree\n' },
+    'merge-tree --write-tree --name-only main ready': { status: 0, stdout: `${'a'.repeat(40)}\n` },
     // conflict: 2 ahead, conflicts
     'rev-list --left-right --count main...conflict': { stdout: '1\t2\n' },
     'log -1 --format=%ct conflict': { stdout: `${recent}\n` },
@@ -164,7 +264,7 @@ function fullRepoGit() {
     // stale: unmerged (2 ahead), clean merge, but old/inactive => salvage candidate
     'rev-list --left-right --count main...stale': { stdout: '0\t2\n' },
     'log -1 --format=%ct stale': { stdout: `${old}\n` },
-    'merge-tree --write-tree --name-only main stale': { status: 0, stdout: 'tree\n' },
+    'merge-tree --write-tree --name-only main stale': { status: 0, stdout: `${'a'.repeat(40)}\n` },
     // dirty: ahead but dirty (no merge-tree should run)
     'rev-list --left-right --count main...dirty': { stdout: '0\t1\n' },
     'log -1 --format=%ct dirty': { stdout: `${recent}\n` }
