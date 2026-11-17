@@ -35,9 +35,10 @@ function buildDefaultAdapterOptions(options, adapterId) {
 function createDefaultAdapters(options = {}) {
   return [
     createClaudeHistoryAdapter(buildDefaultAdapterOptions(options, 'claude-history')),
-    createDmuxTmuxAdapter(buildDefaultAdapterOptions(options, 'dmux-tmux')),
     createCodexWorktreeAdapter(buildDefaultAdapterOptions(options, 'codex-worktree')),
-    createOpencodeAdapter(buildDefaultAdapterOptions(options, 'opencode'))
+    createOpencodeAdapter(buildDefaultAdapterOptions(options, 'opencode')),
+    // Specific native file formats must win before dmux's generic JSON plans.
+    createDmuxTmuxAdapter(buildDefaultAdapterOptions(options, 'dmux-tmux'))
   ];
 }
 
