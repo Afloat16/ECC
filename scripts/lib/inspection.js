@@ -51,7 +51,7 @@ function groupFailures(skillRuns) {
     }
 
     const normalizedReason = normalizeFailureReason(run.failureReason);
-    const key = `${run.skillId}::${normalizedReason}`;
+    const key = JSON.stringify([run.skillId, normalizedReason]);
 
     if (!groups.has(key)) {
       groups.set(key, {

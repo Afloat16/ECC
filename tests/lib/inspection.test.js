@@ -151,11 +151,11 @@ async function runTests() {
     const groups = groupFailures(runs);
     assert.strictEqual(groups.size, 2);
 
-    const skillAGroup = groups.get('skill-a::timeout');
+    const skillAGroup = [...groups.values()].find(group => group.skillId === 'skill-a' && group.normalizedReason === 'timeout');
     assert.ok(skillAGroup);
     assert.strictEqual(skillAGroup.runs.length, 2);
 
-    const skillBGroup = groups.get('skill-b::parse error');
+    const skillBGroup = [...groups.values()].find(group => group.skillId === 'skill-b' && group.normalizedReason === 'parse error');
     assert.ok(skillBGroup);
     assert.strictEqual(skillBGroup.runs.length, 1);
   })) passed += 1; else failed += 1;
