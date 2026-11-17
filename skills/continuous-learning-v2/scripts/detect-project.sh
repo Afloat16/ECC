@@ -267,54 +267,7 @@ _clv2_update_project_registry() {
   _CLV2_REG_PREMOTE="$premote" \
   _CLV2_REG_PDIR="$pdir" \
   _CLV2_REG_FILE="$_CLV2_REGISTRY_FILE" \
-  "$_CLV2_PYTHON_CMD" -c '
-import json, os, tempfile
-from datetime import datetime, timezone
-
-registry_path = os.environ["_CLV2_REG_FILE"]
-project_dir = os.environ["_CLV2_REG_PDIR"]
-project_file = os.path.join(project_dir, "project.json")
-
-os.makedirs(project_dir, exist_ok=True)
-
-def atomic_write_json(path, payload):
-    fd, tmp_path = tempfile.mkstemp(
-        prefix=f".{os.path.basename(path)}.tmp.",
-        dir=os.path.dirname(path),
-        text=True,
-    )
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(payload, f, indent=2)
-            f.write("\n")
-        os.replace(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
-try:
-    with open(registry_path) as f:
-        registry = json.load(f)
-except (FileNotFoundError, json.JSONDecodeError):
-    registry = {}
-
-now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-entry = registry.get(os.environ["_CLV2_REG_PID"], {})
-
-metadata = {
-    "id": os.environ["_CLV2_REG_PID"],
-    "name": os.environ["_CLV2_REG_PNAME"],
-    "root": os.environ["_CLV2_REG_PROOT"],
-    "remote": os.environ["_CLV2_REG_PREMOTE"],
-    "created_at": entry.get("created_at", now),
-    "last_seen": now,
-}
-
-registry[os.environ["_CLV2_REG_PID"]] = metadata
-
-atomic_write_json(project_file, metadata)
-atomic_write_json(registry_path, registry)
-' 2>/dev/null || true
+  "$_CLV2_PYTHON_CMD" "$(dirname "${BASH_SOURCE[0]}")/lib/project-registry.py" 2>/dev/null || true
 }
 
 # Auto-detect on source
