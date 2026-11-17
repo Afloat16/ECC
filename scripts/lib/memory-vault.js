@@ -535,8 +535,12 @@ function readMemoryFiles(options = {}) {
   };
 }
 
+function normalizeSearchText(value) {
+  return String(value || '').normalize('NFC').toLowerCase();
+}
+
 function tokenize(value) {
-  return String(value || '').toLowerCase().match(/[\p{L}\p{N}_-]+/gu) || [];
+  return normalizeSearchText(value).match(/[\p{L}\p{N}_-][\p{L}\p{N}\p{M}_-]*/gu) || [];
 }
 
 function countOccurrences(haystack, needle) {
@@ -553,10 +557,10 @@ function countOccurrences(haystack, needle) {
 }
 
 function scoreMemory(memory, query) {
-  const normalizedQuery = query.toLowerCase();
+  const normalizedQuery = normalizeSearchText(query);
   const tokens = Array.from(new Set(tokenize(query)));
-  const title = memory.title.toLowerCase();
-  const body = memory.body.toLowerCase();
+  const title = normalizeSearchText(memory.title);
+  const body = normalizeSearchText(memory.body);
   const tags = memory.tags.map(tag => tag.toLowerCase());
   const metadata = [
     memory.kind,
@@ -578,7 +582,8 @@ function scoreMemory(memory, query) {
 }
 
 function buildExcerpt(body, query, maxChars = 240) {
-  const normalized = String(body || '').replace(/\s+/g, ' ').trim();
+  // Match and slice the same canonical text so decomposed prefixes cannot shift the excerpt.
+  const normalized = String(body || '').normalize('NFC').replace(/\s+/g, ' ').trim();
   if (normalized.length <= maxChars) return normalized;
   const tokens = tokenize(query);
   const lower = normalized.toLowerCase();
