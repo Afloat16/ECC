@@ -215,7 +215,13 @@ function collectResources(tasks, deps = {}) {
       return { pid: values[0], parentPid: values[1], rssBytes: values[2] * 1024, elapsed: match[4], flags: match[5] };
     });
     return { memory, processStatus: 'ok', processes };
-  } catch { return { memory, processStatus: 'unavailable', processes: [] }; }
+  } catch (error) {
+    // ps exits with 1 and no output when none of the requested PIDs exist.
+    // This is an empty observation, not a failed probe or proof of termination.
+    const emptySelection = error?.status === 1 && error.signal === null
+      && error.stdout === '' && error.stderr === '';
+    return { memory, processStatus: emptySelection ? 'ok' : 'unavailable', processes: [] };
+  }
 }
 
 function readBounded(file, limit = MAX_BYTES) {
