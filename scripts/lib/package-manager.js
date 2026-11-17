@@ -80,7 +80,8 @@ function loadConfig() {
 
   if (content) {
     try {
-      return JSON.parse(content);
+      const config = JSON.parse(content);
+      return config && typeof config === 'object' && !Array.isArray(config) ? config : null;
     } catch {
       return null;
     }
