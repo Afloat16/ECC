@@ -53,7 +53,8 @@ const MIN_ANCHOR_TERMS = 1;
 // v10: illustrative instructions do not supply or withdraw a direct request.
 // v11: a contrastive current-task instruction ends the preceding example scope.
 // v12: preserve current-main evidence floors and anchor checks.
-const ROUTING_POLICY_VERSION = 12;
+// v13: fill the candidate window after checking admission policy.
+const ROUTING_POLICY_VERSION = 13;
 const TASK_KEYS = new Set(['sessionId', 'taskId', 'revision', 'phase', 'query', 'explicitIds', 'proposedIds', 'noWorkflow']);
 
 const DIRECTIVE_VERB = /\b(use|apply|invoke|run|follow|load)\s+(the\s+)?/i;
@@ -212,9 +213,13 @@ function routingIndexFor(entries, excluded, triggers = {}) {
 
 function candidatesFor(query, entries, excluded, admissible, triggers = {}) {
   const index = routingIndexFor(entries, excluded, triggers);
-  const candidates = searchRetrieval(index, query, { limit: MAX_CANDIDATES * 3 })
-    .filter(candidate => admissible(candidate.id))
-    .slice(0, MAX_CANDIDATES);
+  const candidates = [];
+  // Denied high-ranking skills must not crowd eligible results out of the window.
+  for (const candidate of searchRetrieval(index, query, { limit: index.entryCount })) {
+    if (!admissible(candidate.id)) continue;
+    candidates.push(candidate);
+    if (candidates.length === MAX_CANDIDATES) break;
+  }
   return { candidates, index };
 }
 
