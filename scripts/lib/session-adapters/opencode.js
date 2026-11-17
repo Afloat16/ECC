@@ -34,7 +34,11 @@ function resolveStorageDir(options = {}, context = {}) {
     return path.resolve(explicit);
   }
 
-  return path.join(os.homedir(), '.local', 'share', 'opencode', 'storage');
+  const xdgDataHome = process.env.XDG_DATA_HOME;
+  const dataHome = xdgDataHome && path.isAbsolute(xdgDataHome)
+    ? xdgDataHome
+    : path.join(os.homedir(), '.local', 'share');
+  return path.join(dataHome, 'opencode', 'storage');
 }
 
 function isSessionInfoFile(filePath) {
