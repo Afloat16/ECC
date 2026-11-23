@@ -13,7 +13,8 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { sanitizeSessionId, readBridge, writeBridgeAtomic } = require('../lib/session-bridge');
+const { sanitizeSessionId, getBridgePath, readBridge, writeBridgeAtomic } = require('../lib/session-bridge');
+const { acquireSettingsLock } = require('../lib/install/claude-settings-lock');
 const {
   readSessionCostSnapshot,
   warnSessionCostSnapshotFailure
@@ -25,6 +26,8 @@ const MAX_FILES_TRACKED = 200;
 const RECENT_TOOLS_SIZE = 5;
 const HASH_INPUT_LIMIT = 2048;
 const WARNING_CACHE_PREFIX = 'ecc-metrics-cost-warnings-';
+const MAX_BRIDGE_LOCK_WAIT_MS = 1000;
+const HOOK_FINISH_RESERVE_MS = 100;
 
 function stableStringify(value, depth = 0) {
   if (depth > 4) return '[depth-limit]';
@@ -201,6 +204,56 @@ function readSessionCost(sessionId) {
   }
 }
 
+function recordToolMetrics(sessionId, toolName, toolInput) {
+  const now = new Date().toISOString();
+  const bridge = readBridge(sessionId) || {
+    session_id: sessionId,
+    total_cost_usd: 0,
+    total_input_tokens: 0,
+    total_output_tokens: 0,
+    tool_count: 0,
+    files_modified_count: 0,
+    files_modified: [],
+    recent_tools: [],
+    first_timestamp: now,
+    last_timestamp: now,
+    context_remaining_pct: null
+  };
+
+  // Increment tool count
+  bridge.tool_count = (bridge.tool_count || 0) + 1;
+  bridge.last_timestamp = now;
+  if (!bridge.first_timestamp) bridge.first_timestamp = now;
+
+  // Track modified files, including notebooks edited through NotebookEdit.
+  const isWriteOp = /^(Write|Edit|MultiEdit|NotebookEdit)$/i.test(toolName);
+  if (isWriteOp) {
+    const newPaths = extractFilePaths(toolName, toolInput);
+    const existing = new Set(bridge.files_modified || []);
+    for (const p of newPaths) {
+      if (existing.size < MAX_FILES_TRACKED && !existing.has(p)) {
+        existing.add(p);
+      }
+    }
+    bridge.files_modified = [...existing];
+    bridge.files_modified_count = existing.size;
+  }
+
+  // Ring buffer for loop detection
+  const recent = bridge.recent_tools || [];
+  recent.push({ tool: toolName, hash: hashToolCall(toolName, toolInput) });
+  if (recent.length > RECENT_TOOLS_SIZE) recent.shift();
+  bridge.recent_tools = recent;
+
+  // Use the O(1) session snapshot, with JSONL compatibility fallback.
+  const costs = readSessionCost(sessionId);
+  bridge.total_cost_usd = Math.round(costs.totalCost * 1e6) / 1e6;
+  bridge.total_input_tokens = costs.totalIn;
+  bridge.total_output_tokens = costs.totalOut;
+
+  writeBridgeAtomic(sessionId, bridge);
+}
+
 /**
  * @param {string} rawInput - Raw JSON string from stdin
  * @returns {string} Pass-through
@@ -215,53 +268,22 @@ function run(rawInput) {
 
     if (!sessionId) return rawInput;
 
-    const now = new Date().toISOString();
-    const bridge = readBridge(sessionId) || {
-      session_id: sessionId,
-      total_cost_usd: 0,
-      total_input_tokens: 0,
-      total_output_tokens: 0,
-      tool_count: 0,
-      files_modified_count: 0,
-      files_modified: [],
-      recent_tools: [],
-      first_timestamp: now,
-      last_timestamp: now,
-      context_remaining_pct: null
-    };
-
-    // Increment tool count
-    bridge.tool_count = (bridge.tool_count || 0) + 1;
-    bridge.last_timestamp = now;
-    if (!bridge.first_timestamp) bridge.first_timestamp = now;
-
-    // Track modified files, including notebooks edited through NotebookEdit.
-    const isWriteOp = /^(Write|Edit|MultiEdit|NotebookEdit)$/i.test(toolName);
-    if (isWriteOp) {
-      const newPaths = extractFilePaths(toolName, toolInput);
-      const existing = new Set(bridge.files_modified || []);
-      for (const p of newPaths) {
-        if (existing.size < MAX_FILES_TRACKED && !existing.has(p)) {
-          existing.add(p);
-        }
-      }
-      bridge.files_modified = [...existing];
-      bridge.files_modified_count = existing.size;
+    let timeoutMs = MAX_BRIDGE_LOCK_WAIT_MS;
+    if (process.env.ECC_HOOK_DEADLINE_MS !== undefined) {
+      const deadline = Number(process.env.ECC_HOOK_DEADLINE_MS);
+      if (!Number.isSafeInteger(deadline) || deadline <= 0) return rawInput;
+      timeoutMs = Math.min(timeoutMs, deadline - Date.now() - HOOK_FINISH_RESERVE_MS);
+      if (timeoutMs <= 0) return rawInput;
     }
 
-    // Ring buffer for loop detection
-    const recent = bridge.recent_tools || [];
-    recent.push({ tool: toolName, hash: hashToolCall(toolName, toolInput) });
-    if (recent.length > RECENT_TOOLS_SIZE) recent.shift();
-    bridge.recent_tools = recent;
-
-    // Use the O(1) session snapshot, with JSONL compatibility fallback.
-    const costs = readSessionCost(sessionId);
-    bridge.total_cost_usd = Math.round(costs.totalCost * 1e6) / 1e6;
-    bridge.total_input_tokens = costs.totalIn;
-    bridge.total_output_tokens = costs.totalOut;
-
-    writeBridgeAtomic(sessionId, bridge);
+    // Unique temporary files protect publication, but the entire read/update/write
+    // must be serialized so concurrent tool events do not overwrite one another.
+    const release = acquireSettingsLock(getBridgePath(sessionId), { label: 'session metrics', timeoutMs });
+    try {
+      recordToolMetrics(sessionId, toolName, toolInput);
+    } finally {
+      release();
+    }
   } catch {
     // Never block tool execution
   }
