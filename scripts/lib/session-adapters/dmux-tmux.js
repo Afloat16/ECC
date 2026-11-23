@@ -3,8 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const { collectSessionSnapshot } = require('../orchestration-session');
+const { collectSessionSnapshot, resolveNamedSessionTarget } = require('../orchestration-session');
 const { normalizeDmuxSnapshot, persistCanonicalSnapshot } = require('./canonical-session');
+const { parseCodexTarget, isCodexRolloutFileTarget } = require('./codex-worktree');
+const { parseOpencodeTarget } = require('./opencode');
 
 function isPlanFileTarget(target, cwd) {
   if (typeof target !== 'string' || target.length === 0) {
@@ -22,7 +24,13 @@ function isSessionNameTarget(target, cwd) {
     return false;
   }
 
-  const coordinationDir = path.resolve(cwd, '.claude', 'orchestration', target);
+  // Slug normalization must not claim explicit targets for later adapters.
+  if (parseCodexTarget(target) !== null || parseOpencodeTarget(target) !== null
+    || isCodexRolloutFileTarget(target, cwd)) {
+    return false;
+  }
+
+  const { coordinationDir } = resolveNamedSessionTarget(target, cwd);
   return fs.existsSync(coordinationDir) && fs.statSync(coordinationDir).isDirectory();
 }
 

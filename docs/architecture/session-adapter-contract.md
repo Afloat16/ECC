@@ -257,6 +257,20 @@ Consumers MUST NOT:
 - Worker runtime kind: `tmux-pane`
 - Artifacts: `statusFile`, `taskFile`, `handoffFile`
 
+Plan targets use the same session slug and default coordination root as
+`orchestrate-worktrees`: `<repoRoot>/.orchestration/<session-slug>`. An omitted
+session name defaults to the repository directory name. Relative `repoRoot` and
+`coordinationRoot` values resolve against the invocation directory.
+
+Named targets first look for that session slug under the invocation directory's
+`.orchestration`. If no such directory exists, they retain the legacy
+`.claude/orchestration/<exact-session-name>` lookup. The current default directory
+takes precedence when both locations exist. Use the plan path to inspect sessions
+with a custom coordination root. Automatic detection keeps explicit Codex and
+OpenCode targets, and existing Codex rollout files, with their respective
+adapters. A plan target or explicit `dmux-tmux` adapter still selects an
+orchestration session whose name resembles one of those targets.
+
 ### `claude-history`
 
 - Source: `scripts/lib/session-manager.js`

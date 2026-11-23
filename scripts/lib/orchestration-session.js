@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { slugify } = require('./tmux-worktree-orchestrator');
 
 function stripCodeTicks(value) {
   if (typeof value !== 'string') {
@@ -244,30 +245,44 @@ function buildSessionSnapshot({ sessionName, coordinationDir, panes }) {
   };
 }
 
-function resolveSnapshotTarget(targetPath, cwd = process.cwd()) {
-  const absoluteTarget = path.resolve(cwd, targetPath);
+function resolveNamedSessionTarget(targetPath, cwd = process.cwd()) {
+  const sessionName = slugify(targetPath, 'session');
+  const coordinationDir = path.join(cwd, '.orchestration', sessionName);
 
-  if (fs.existsSync(absoluteTarget) && fs.statSync(absoluteTarget).isFile()) {
-    const config = JSON.parse(fs.readFileSync(absoluteTarget, 'utf8'));
-    const repoRoot = path.resolve(config.repoRoot || cwd);
-    const coordinationRoot = path.resolve(
-      config.coordinationRoot || path.join(repoRoot, '.orchestration')
-    );
-
-    return {
-      sessionName: config.sessionName,
-      coordinationDir: path.join(coordinationRoot, config.sessionName),
-      repoRoot,
-      targetType: 'plan'
-    };
+  if (fs.existsSync(coordinationDir) && fs.statSync(coordinationDir).isDirectory()) {
+    return { sessionName, coordinationDir, repoRoot: cwd, targetType: 'session' };
   }
 
+  // Retain exact names and the original fallback for legacy coordination dirs.
   return {
     sessionName: targetPath,
     coordinationDir: path.join(cwd, '.claude', 'orchestration', targetPath),
     repoRoot: cwd,
     targetType: 'session'
   };
+}
+
+function resolveSnapshotTarget(targetPath, cwd = process.cwd()) {
+  const absoluteTarget = path.resolve(cwd, targetPath);
+
+  if (fs.existsSync(absoluteTarget) && fs.statSync(absoluteTarget).isFile()) {
+    const config = JSON.parse(fs.readFileSync(absoluteTarget, 'utf8'));
+    const repoRoot = path.resolve(cwd, config.repoRoot || '.');
+    const sessionName = slugify(config.sessionName || path.basename(repoRoot), 'session');
+    const coordinationRoot = path.resolve(
+      cwd,
+      config.coordinationRoot || path.join(repoRoot, '.orchestration')
+    );
+
+    return {
+      sessionName,
+      coordinationDir: path.join(coordinationRoot, sessionName),
+      repoRoot,
+      targetType: 'plan'
+    };
+  }
+
+  return resolveNamedSessionTarget(targetPath, cwd);
 }
 
 function collectSessionSnapshot(targetPath, cwd = process.cwd()) {
@@ -295,5 +310,6 @@ module.exports = {
   parseWorkerHandoff,
   parseWorkerStatus,
   parseWorkerTask,
+  resolveNamedSessionTarget,
   resolveSnapshotTarget
 };
