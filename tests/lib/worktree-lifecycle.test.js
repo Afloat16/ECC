@@ -128,7 +128,7 @@ test('git.listWorktrees fails instead of returning an empty successful listing',
 test('git.aheadBehind + lastCommitMs parse rev-list/log output', () => {
   const git = fakeGit('/repo', {
     'rev-list --left-right --count main...feature': { stdout: '3\t5\n' },
-    'log -1 --format=%ct feature': { stdout: '1700000000\n' }
+    'log -1 --format=%ct refs/heads/feature --': { stdout: '1700000000\n' }
   });
   assert.deepStrictEqual(git.aheadBehind('feature', 'main'), { behind: 3, ahead: 5 });
   assert.strictEqual(git.lastCommitMs('feature'), 1700000000 * 1000);
@@ -152,22 +152,22 @@ function fullRepoGit() {
     },
     // ready: 2 ahead, clean merge
     'rev-list --left-right --count main...ready': { stdout: '0\t2\n' },
-    'log -1 --format=%ct ready': { stdout: `${recent}\n` },
+    'log -1 --format=%ct refs/heads/ready --': { stdout: `${recent}\n` },
     'merge-tree --write-tree --name-only main ready': { status: 0, stdout: 'tree\n' },
     // conflict: 2 ahead, conflicts
     'rev-list --left-right --count main...conflict': { stdout: '1\t2\n' },
-    'log -1 --format=%ct conflict': { stdout: `${recent}\n` },
+    'log -1 --format=%ct refs/heads/conflict --': { stdout: `${recent}\n` },
     'merge-tree --write-tree --name-only main conflict': { status: 1, stdout: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nsrc/x.js\n' },
     // merged: 0 ahead
     'rev-list --left-right --count main...merged': { stdout: '4\t0\n' },
-    'log -1 --format=%ct merged': { stdout: `${recent}\n` },
+    'log -1 --format=%ct refs/heads/merged --': { stdout: `${recent}\n` },
     // stale: unmerged (2 ahead), clean merge, but old/inactive => salvage candidate
     'rev-list --left-right --count main...stale': { stdout: '0\t2\n' },
-    'log -1 --format=%ct stale': { stdout: `${old}\n` },
+    'log -1 --format=%ct refs/heads/stale --': { stdout: `${old}\n` },
     'merge-tree --write-tree --name-only main stale': { status: 0, stdout: 'tree\n' },
     // dirty: ahead but dirty (no merge-tree should run)
     'rev-list --left-right --count main...dirty': { stdout: '0\t1\n' },
-    'log -1 --format=%ct dirty': { stdout: `${recent}\n` }
+    'log -1 --format=%ct refs/heads/dirty --': { stdout: `${recent}\n` }
   }, { '/repo/.wt/dirty': true });
 }
 

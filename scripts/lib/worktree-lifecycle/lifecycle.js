@@ -61,7 +61,7 @@ function classifyWorktree(facts, { staleThresholdMs, nowMs }) {
 }
 
 function analyzeWorktree(worktree, options, git) {
-  const { baseBranch, staleThresholdMs, nowMs } = options;
+  const { baseBranch, staleThresholdMs, nowMs, lastCommitTimes } = options;
   const isMain = worktree.canonicalRepoRoot === git.repoRoot
     || worktree.path === git.repoRoot
     || worktree.branch === baseBranch;
@@ -69,7 +69,11 @@ function analyzeWorktree(worktree, options, git) {
   const branch = worktree.branch;
   const dirty = git.isDirty(worktree.path);
   const aheadBehind = (!isMain && branch) ? git.aheadBehind(branch, baseBranch) : null;
-  const lastCommitMs = branch ? git.lastCommitMs(branch) : null;
+  const lastCommitMs = branch
+    ? lastCommitTimes && lastCommitTimes.has(branch)
+      ? lastCommitTimes.get(branch)
+      : git.lastCommitMs(branch)
+    : null;
 
   // Only run conflict prediction when it matters: a clean, ahead branch.
   const ahead = aheadBehind ? aheadBehind.ahead : 0;
@@ -114,8 +118,12 @@ function buildLifecycleReport(repoRoot, options = {}, deps = {}) {
     : DEFAULT_STALE_MS;
   const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
 
-  const worktrees = git.listWorktrees().map(worktree =>
-    analyzeWorktree(worktree, { baseBranch, staleThresholdMs, nowMs }, git)
+  const listed = git.listWorktrees();
+  const lastCommitTimes = typeof git.lastCommitTimes === 'function'
+    ? git.lastCommitTimes(listed.map(worktree => worktree.branch).filter(Boolean))
+    : null;
+  const worktrees = listed.map(worktree =>
+    analyzeWorktree(worktree, { baseBranch, staleThresholdMs, nowMs, lastCommitTimes }, git)
   );
 
   const conflictQueue = worktrees.filter(w => w.state === STATES.CONFLICT);

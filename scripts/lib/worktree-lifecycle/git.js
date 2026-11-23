@@ -114,9 +114,42 @@ function createGitRunner(repoRoot, runImpl = defaultRunImpl) {
 
     // Last commit time (epoch ms) on a branch.
     lastCommitMs(branch) {
-      const out = stdoutOf(['log', '-1', '--format=%ct', branch]);
+      const out = stdoutOf(['log', '-1', '--format=%ct', `refs/heads/${branch}`, '--']);
       const seconds = Number(out);
       return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : null;
+    },
+
+    // Read only selected branch dates, with bounded arguments for large fleets.
+    // Missing or failed observations stay absent so callers can use lastCommitMs.
+    lastCommitTimes(branches) {
+      const selected = new Set(branches);
+      const times = new Map();
+      let refs = [];
+      let chars = 0;
+      const flush = () => {
+        const result = run(['for-each-ref', '--format=%(refname)%00%(committerdate:unix)', '--', ...refs]);
+        if (result.status === 0) {
+          for (const line of (result.stdout || '').split('\n')) {
+            const [ref, timestamp] = line.split('\0');
+            if (!ref.startsWith('refs/heads/') || timestamp === undefined) continue;
+            const branch = ref.slice('refs/heads/'.length);
+            if (!selected.has(branch)) continue;
+            const seconds = Number(timestamp);
+            times.set(branch, Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : null);
+          }
+        }
+        refs = [];
+        chars = 0;
+      };
+      for (const branch of selected) {
+        const ref = 'refs/heads/' + branch;
+        // Leave ample room for the executable, format and quoting on Windows.
+        if (refs.length && chars + ref.length + 1 > 8192) flush();
+        refs.push(ref);
+        chars += ref.length + 1;
+      }
+      if (refs.length) flush();
+      return times;
     },
 
     // Predict merge conflicts WITHOUT touching the working tree using
