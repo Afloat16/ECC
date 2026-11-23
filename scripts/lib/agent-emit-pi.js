@@ -27,6 +27,7 @@
  */
 
 const { mapToolToPi } = require('./agent-tool-map');
+const { dump } = require('js-yaml');
 
 // Pi core built-in agent names (case-sensitive). ECC agent names are kebab-case
 // and do not collide today; warn if a future one ever does.
@@ -82,12 +83,10 @@ function emitPiAgent(ir) {
 /** Emit a single-line YAML scalar, quoted only when needed. */
 function yamlScalar(value) {
   const s = String(value);
-  // Quote when it contains a leading/trailing space, a colon followed by a
-  // space, a comment-starting hash, a leading special char, or a newline.
-  if (/^\s|\s$|: |\n|\s#|^[-?*&|>#@`"'\][{}!,]/.test(s)) {
-    return JSON.stringify(s);
-  }
-  return s;
+  // Preserve string types such as "false" and "42", and escape YAML controls.
+  // Force multiline strings into quotes so each frontmatter field stays on
+  // one physical line instead of introducing a block scalar.
+  return dump(s, { lineWidth: -1, quoteStyle: 'double', forceQuotes: s.includes('\n') }).trimEnd();
 }
 
 /**
