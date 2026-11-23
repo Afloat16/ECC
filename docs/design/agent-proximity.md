@@ -109,7 +109,9 @@ priority(a) = ( committed-work(a),  age(a) )      lexicographic
 ```
 
 More committed work wins; ties break on earlier start; the final tiebreak is a
-stable agent id. The lower-priority agent receives the steer.
+stable agent id. Both ages use the same clock sample so a clock tick between
+comparisons cannot change the right-of-way. The lower-priority agent receives the
+steer.
 
 **Closure rate.** TCAS escalates on *closing speed*, not just separation. From two
 risk samples Δt apart, `closureRate = (R_t − R_{t−Δt}) / Δt`; a positive closure
