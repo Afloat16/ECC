@@ -8,6 +8,7 @@ const path = require('path');
 const {
   slugify,
   renderTemplate,
+  buildTemplateVariables,
   buildOrchestrationPlan,
   executePlan,
   materializePlan,
@@ -153,7 +154,7 @@ test('buildOrchestrationPlan rejects worker names that collapse to the same slug
   );
 });
 
-test('buildOrchestrationPlan exposes shell-safe launcher aliases alongside raw defaults', () => {
+test('launcher template variables expose shell-safe aliases alongside raw defaults', () => {
   const repoRoot = path.join('/tmp', 'My Repo');
   const plan = buildOrchestrationPlan({
     repoRoot,
@@ -163,17 +164,25 @@ test('buildOrchestrationPlan exposes shell-safe launcher aliases alongside raw d
   });
   const quote = value => `'${String(value).replace(/'/g, `'\\''`)}'`;
   const resolvedRepoRoot = plan.workerPlans[0].repoRoot;
+  const command = renderTemplate(
+    'bash {repo_root_sh}/scripts/orchestrate-codex-worker.sh {task_file_sh} {worker_name_sh} {worker_name}',
+    buildTemplateVariables({
+      repo_root: resolvedRepoRoot,
+      task_file: plan.workerPlans[0].taskFilePath,
+      worker_name: plan.workerPlans[0].workerName
+    })
+  );
 
   assert.ok(
-    plan.workerPlans[0].launchCommand.includes(`bash ${quote(resolvedRepoRoot)}/scripts/orchestrate-codex-worker.sh`),
+    command.includes(`bash ${quote(resolvedRepoRoot)}/scripts/orchestrate-codex-worker.sh`),
     'repo_root_sh should provide a shell-safe path'
   );
   assert.ok(
-    plan.workerPlans[0].launchCommand.includes(quote(plan.workerPlans[0].taskFilePath)),
+    command.includes(quote(plan.workerPlans[0].taskFilePath)),
     'task_file_sh should provide a shell-safe path'
   );
   assert.ok(
-    plan.workerPlans[0].launchCommand.includes(`${quote(plan.workerPlans[0].workerName)} ${plan.workerPlans[0].workerName}`),
+    command.includes(`${quote(plan.workerPlans[0].workerName)} ${plan.workerPlans[0].workerName}`),
     'raw defaults should remain available alongside shell-safe aliases'
   );
 });

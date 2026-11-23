@@ -213,7 +213,7 @@ function buildOrchestrationPlan(config = {}) {
     const launcherCommand = worker.launcherCommand || defaultLauncher;
     const workerSeedPaths = normalizeSeedPaths(worker.seedPaths, repoRoot);
     const seedPaths = normalizeSeedPaths([...globalSeedPaths, ...workerSeedPaths], repoRoot);
-    const templateVariables = buildTemplateVariables({
+    const launcherVariables = {
       branch_name: branchName,
       handoff_file: handoffFilePath,
       repo_root: repoRoot,
@@ -223,12 +223,21 @@ function buildOrchestrationPlan(config = {}) {
       worker_name: workerName,
       worker_slug: workerSlug,
       worktree_path: worktreePath
-    });
+    };
 
     if (!launcherCommand) {
       throw new Error(`Worker ${workerName} is missing a launcherCommand`);
     }
 
+    const renderedCommand = renderTemplate(launcherCommand, buildTemplateVariables(launcherVariables));
+    const needsTask = /\{task_file(?:_raw|_sh)?\}/.test(launcherCommand);
+    const nodeProgram = process.platform === 'win32' ? process.execPath.replace(/\\/g, '/') : process.execPath;
+    const launchCommand = needsTask
+      ? formatCommand(shellQuote(nodeProgram), [
+        path.join(__dirname, 'orchestration-worker-launcher.js'),
+        JSON.stringify({ launcherCommand, variables: launcherVariables })
+      ])
+      : renderedCommand;
     const gitArgs = ['worktree', 'add', '-b', branchName, worktreePath, baseRef];
 
     return {
@@ -237,7 +246,7 @@ function buildOrchestrationPlan(config = {}) {
       gitArgs,
       gitCommand: formatCommand('git', gitArgs),
       handoffFilePath,
-      launchCommand: renderTemplate(launcherCommand, templateVariables),
+      launchCommand,
       repoRoot,
       sessionName,
       seedPaths,
@@ -588,6 +597,7 @@ function executePlan(plan, runtime = {}) {
 
 module.exports = {
   buildOrchestrationPlan,
+  buildTemplateVariables,
   executePlan,
   materializePlan,
   normalizeSeedPaths,

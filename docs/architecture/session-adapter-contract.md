@@ -170,6 +170,28 @@ Adapter-specific optional fields belong inside `runtime`, `artifacts`, or other
 documented nested objects. Adapters MUST NOT invent new top-level fields without
 updating this contract.
 
+## Orchestrated Task Artifacts
+
+For `dmux-tmux` workers, `artifacts.taskFile` refers to the canonical task in the
+coordination directory, alongside the status and handoff artifacts. It remains
+available after the worker exits.
+
+When a launcher uses `{task_file}`, `{task_file_raw}`, or `{task_file_sh}`, the
+generated command copies that canonical task into a fresh temporary directory
+inside the worker worktree at launch time. This also works for `--write-only`
+plans after the planned worktrees are created and their generated commands are
+run. The Codex worker's existing worktree containment check remains in effect;
+the temporary runtime path does not replace the canonical snapshot reference.
+
+The launcher appends a local `/.ecc-orchestration-task-*/` rule to Git's
+`info/exclude` without rewriting existing contents. It then checks that Git
+actually ignores the task before starting the worker; a conflicting tracked
+`.gitignore` negation stops preparation and records a failed status. The rule
+remains for later launches. Normal completion removes the staged task and its
+empty directory; replacement files, additional worker files, or a forcibly
+terminated launcher can leave an ignored directory behind. This exclusion
+applies to ordinary Git staging under the launch-time rules, not `git add -f`.
+
 ## State Semantics
 
 The contract intentionally keeps `session.state` and `workers[].state` flexible
