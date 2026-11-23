@@ -286,6 +286,7 @@ function main() {
         "scripts/lib/memory-vault-format.js",
         "scripts/lib/memory-vault.js",
         "scripts/lib/hook-session.js",
+        "scripts/lib/toml-edit.js",
         "scripts/discussion-audit.js",
         "scripts/operator-readiness-dashboard.js",
         "scripts/preview-pack-smoke.js",

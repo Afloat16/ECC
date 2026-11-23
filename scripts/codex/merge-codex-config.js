@@ -23,6 +23,8 @@ try {
   process.exit(1);
 }
 
+const { findTomlStatements, preservesExistingValues } = require('../lib/toml-edit');
+
 const ROOT_KEYS = ['approval_policy', 'sandbox_mode', 'web_search', 'notify', 'persistent_instructions'];
 const TABLE_PATHS = [
   'features',
@@ -31,7 +33,6 @@ const TABLE_PATHS = [
   'agents.reviewer',
   'agents.docs_researcher',
 ];
-const TOML_HEADER_RE = /^[ \t]*(?:\[[^[\]\n][^\]\n]*\]|\[\[[^[\]\n][^\]\n]*\]\])[ \t]*(?:#.*)?$/m;
 
 function log(message) {
   console.log(`[ecc-codex] ${message}`);
@@ -65,23 +66,16 @@ function setNested(obj, pathParts, value) {
 }
 
 function findFirstTableIndex(raw) {
-  const match = TOML_HEADER_RE.exec(raw);
-  return match ? match.index : -1;
+  const firstTable = findTomlStatements(raw).find(statement => statement.kind.endsWith('table'));
+  return firstTable ? firstTable.start : -1;
 }
 
 function findTableRange(raw, tablePath) {
-  const escaped = tablePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const headerPattern = new RegExp(`^[ \\t]*\\[${escaped}\\][ \\t]*(?:#.*)?$`, 'm');
-  const match = headerPattern.exec(raw);
-  if (!match) {
-    return null;
-  }
-
-  const headerEnd = raw.indexOf('\n', match.index);
-  const bodyStart = headerEnd === -1 ? raw.length : headerEnd + 1;
-  const nextHeaderRel = raw.slice(bodyStart).search(TOML_HEADER_RE);
-  const bodyEnd = nextHeaderRel === -1 ? raw.length : bodyStart + nextHeaderRel;
-  return { bodyStart, bodyEnd };
+  const headers = findTomlStatements(raw).filter(statement => statement.kind.endsWith('table'));
+  const index = headers.findIndex(header => header.kind === 'table'
+    && JSON.stringify(header.path) === JSON.stringify(tablePath.split('.')));
+  if (index === -1) return null;
+  return { bodyStart: headers[index].end, bodyEnd: headers[index + 1]?.start ?? raw.length };
 }
 
 function ensureTrailingNewline(text) {
@@ -92,19 +86,16 @@ function insertBeforeFirstTable(raw, block) {
   const normalizedBlock = ensureTrailingNewline(block.trimEnd());
   const firstTableIndex = findFirstTableIndex(raw);
   if (firstTableIndex === -1) {
-    const prefix = raw.trimEnd();
-    return prefix ? `${prefix}\n${normalizedBlock}` : normalizedBlock;
+    return raw ? `${ensureTrailingNewline(raw)}${normalizedBlock}` : normalizedBlock;
   }
 
-  const before = raw.slice(0, firstTableIndex).trimEnd();
-  const after = raw.slice(firstTableIndex).replace(/^\n+/, '');
-  return `${before}\n\n${normalizedBlock}\n${after}`;
+  const before = raw.slice(0, firstTableIndex);
+  return `${before}${normalizedBlock}\n${raw.slice(firstTableIndex)}`;
 }
 
 function appendBlock(raw, block) {
-  const prefix = raw.trimEnd();
   const normalizedBlock = block.trimEnd();
-  return prefix ? `${prefix}\n\n${normalizedBlock}\n` : `${normalizedBlock}\n`;
+  return raw ? `${ensureTrailingNewline(raw)}\n${normalizedBlock}\n` : `${normalizedBlock}\n`;
 }
 
 function stringifyValue(value) {
@@ -112,37 +103,17 @@ function stringifyValue(value) {
 }
 
 function updateInlineTableKeys(raw, tablePath, missingKeys) {
-  const pathParts = tablePath.split('.');
-  if (pathParts.length < 2) {
-    return null;
-  }
+  const statement = findTomlStatements(raw).find(entry => entry.kind === 'assignment'
+    && JSON.stringify(entry.path) === JSON.stringify(tablePath.split('.')));
+  if (!statement || statement.inlineTableEnd === -1) return null;
 
-  const parentPath = pathParts.slice(0, -1).join('.');
-  const parentRange = findTableRange(raw, parentPath);
-  if (!parentRange) {
-    return null;
-  }
-
-  const tableKey = pathParts[pathParts.length - 1];
-  const escapedKey = tableKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const body = raw.slice(parentRange.bodyStart, parentRange.bodyEnd);
-  const lines = body.split('\n');
-  for (let index = 0; index < lines.length; index += 1) {
-    const inlinePattern = new RegExp(`^(\\s*${escapedKey}\\s*=\\s*\\{)(.*?)(\\}\\s*(?:#.*)?)$`);
-    const match = inlinePattern.exec(lines[index]);
-    if (!match) {
-      continue;
-    }
-
-    const additions = Object.entries(missingKeys)
-      .map(([key, value]) => `${key} = ${stringifyValue(value)}`)
-      .join(', ');
-    const existingEntries = match[2].trim();
-    const nextEntries = existingEntries ? `${existingEntries}, ${additions}` : additions;
-    lines[index] = `${match[1]}${nextEntries}${match[3]}`;
-    return `${raw.slice(0, parentRange.bodyStart)}${lines.join('\n')}${raw.slice(parentRange.bodyEnd)}`;
-  }
-  return null;
+  const opening = raw.indexOf('{', statement.assignment + 1);
+  const closing = statement.inlineTableEnd;
+  const separator = raw.slice(opening + 1, closing).trim() ? ', ' : '';
+  const additions = Object.entries(missingKeys)
+    .map(([key, value]) => `${key} = ${stringifyValue(value)}`)
+    .join(', ');
+  return `${raw.slice(0, closing)}${separator}${additions}${raw.slice(closing)}`;
 }
 
 function appendImplicitTable(raw, tablePath, missingKeys) {
@@ -173,9 +144,8 @@ function appendToTable(raw, tablePath, block, missingKeys = null) {
     return raw;
   }
 
-  const before = raw.slice(0, range.bodyEnd).trimEnd();
-  const after = raw.slice(range.bodyEnd).replace(/^\n*/, '\n');
-  return `${before}\n${block.trimEnd()}\n${after}`;
+  const before = ensureTrailingNewline(raw.slice(0, range.bodyEnd));
+  return `${before}${block.trimEnd()}\n${raw.slice(range.bodyEnd)}`;
 }
 
 function stringifyRootKeys(keys) {
@@ -301,6 +271,15 @@ function main() {
   for (const tablePath of missingTables) {
     log(`  [add-table] [${tablePath}]`);
     nextRaw = appendBlock(nextRaw, stringifyTable(tablePath, getNested(referenceConfig, tablePath.split('.'))));
+  }
+
+  try {
+    if (!preservesExistingValues(targetConfig, TOML.parse(nextRaw))) {
+      throw new Error('Existing values changed');
+    }
+  } catch {
+    console.error('[ecc-codex] Cannot safely merge the Codex baseline; config left unchanged.');
+    process.exit(1);
   }
 
   if (dryRun) {

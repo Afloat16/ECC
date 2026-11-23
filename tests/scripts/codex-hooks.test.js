@@ -1157,7 +1157,7 @@ if (
 else failed++;
 
 if (
-  test('merge-codex-config warns when inline tables cannot be safely extended', () => {
+  test('merge-codex-config refuses an invalid inline-table merge even in dry-run', () => {
     const tempDir = createTempDir('codex-merge-inline-warn-');
     const configPath = path.join(tempDir, 'config.toml');
     const original = 'agents = { explorer = { description = "custom explorer" } }\n';
@@ -1166,8 +1166,9 @@ if (
       fs.writeFileSync(configPath, original);
       const result = runNode(mergeCodexConfigScript, [configPath, '--dry-run']);
 
-      assert.strictEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.notStrictEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
       assert.match(result.stderr, /WARNING: Skipping missing keys/);
+      assert.match(result.stderr, /Cannot safely merge.*unchanged/);
       assert.strictEqual(fs.readFileSync(configPath, 'utf8'), original);
     } finally {
       cleanup(tempDir);

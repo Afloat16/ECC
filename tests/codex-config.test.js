@@ -132,6 +132,9 @@ function withMergeFixture(fn) {
     fs.mkdirSync(path.join(root, '.codex'));
     const script = path.join(scriptDir, 'merge-codex-config.js');
     fs.copyFileSync(path.join(repoRoot, 'scripts', 'codex', 'merge-codex-config.js'), script);
+    const helperDir = path.join(root, 'scripts', 'lib');
+    fs.mkdirSync(helperDir, { recursive: true });
+    fs.copyFileSync(path.join(repoRoot, 'scripts', 'lib', 'toml-edit.js'), path.join(helperDir, 'toml-edit.js'));
     for (const name of ['config.toml', 'user-config.example.toml']) {
       const source = path.join(repoRoot, '.codex', name);
       if (fs.existsSync(source)) fs.copyFileSync(source, path.join(root, '.codex', name));

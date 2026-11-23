@@ -19,6 +19,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { isDeepStrictEqual } = require('util');
 const { parseDisabledMcpServers } = require('../lib/mcp-config');
 
 let TOML;
@@ -29,6 +30,8 @@ try {
   console.error('[ecc-mcp] Run: npm install   (from the ECC repo root)');
   process.exit(1);
 }
+
+const { findTomlStatements } = require('../lib/toml-edit');
 
 // ---------------------------------------------------------------------------
 // Package manager detection
@@ -137,65 +140,33 @@ function configDiffers(existing, recommended) {
   return false;
 }
 
-/**
- * Remove a TOML section and its key-value pairs from raw text.
- * Matches the section header even if followed by inline comments or whitespace
- * (e.g. `[mcp_servers.github] # comment`).
- * Returns the text with the section removed.
- */
-function removeSectionFromText(text, sectionHeader) {
-  const escaped = sectionHeader.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const headerPattern = new RegExp(`^${escaped}(\\s*(#.*)?)?$`);
-  const lines = text.split('\n');
-  const result = [];
-  let skipping = false;
-  for (const line of lines) {
-    const trimmed = line.replace(/\r$/, '');
-    if (headerPattern.test(trimmed)) {
-      skipping = true;
-      continue;
-    }
-    if (skipping && /^\[/.test(trimmed)) {
-      skipping = false;
-    }
-    if (!skipping) {
-      result.push(line);
-    }
-  }
-  return result.join('\n');
+function unsafeEdit() {
+  console.error('[ecc-mcp] Cannot safely edit this TOML structure; config left unchanged.');
+  process.exit(1);
 }
 
 /**
- * Collect all TOML sub-section headers for a given server name.
- * @iarna/toml nests subtables, so `[mcp_servers.supabase.env]` appears as
- * `parsed.mcp_servers.supabase.env` (nested), NOT as a flat dotted key.
- * Walk the nested object to find sub-objects that represent TOML sub-tables.
+ * Remove only complete statements owned by the selected server. Quoted keys,
+ * dotted assignments, and nested tables share the same parsed path. A shared
+ * inline ancestor cannot be removed this way without also deleting its peers;
+ * the semantic check refuses that edit before the target file is written.
  */
-function findSubSections(serverObj, prefix) {
-  const sections = [];
-  if (!serverObj || typeof serverObj !== 'object') return sections;
-  for (const key of Object.keys(serverObj)) {
-    const val = serverObj[key];
-    if (val && typeof val === 'object' && !Array.isArray(val)) {
-      const subPath = `${prefix}.${key}`;
-      sections.push(subPath);
-      sections.push(...findSubSections(val, subPath));
+function removeServerFromText(raw, serverName) {
+  const before = TOML.parse(raw);
+  const result = findTomlStatements(raw)
+    .filter(statement => statement.path[0] !== 'mcp_servers' || statement.path[1] !== serverName)
+    .map(statement => raw.slice(statement.start, statement.end))
+    .join('');
+  const expectedServers = Object.fromEntries(Object.entries(before.mcp_servers || {})
+    .filter(([name]) => name !== serverName));
+  try {
+    const after = TOML.parse(result);
+    if (!isDeepStrictEqual(expectedServers, after.mcp_servers || {})
+      || !isDeepStrictEqual({ ...before, mcp_servers: undefined }, { ...after, mcp_servers: undefined })) {
+      unsafeEdit();
     }
-  }
-  return sections;
-}
-
-/**
- * Remove a server and all its sub-sections from raw TOML text.
- * Uses findSubSections to walk the parsed nested object (not flat keys).
- */
-function removeServerFromText(raw, serverName, existing) {
-  let result = removeSectionFromText(raw, `[mcp_servers.${serverName}]`);
-  const serverObj = existing[serverName];
-  if (serverObj) {
-    for (const sub of findSubSections(serverObj, serverName)) {
-      result = removeSectionFromText(result, `[mcp_servers.${sub}]`);
-    }
+  } catch {
+    unsafeEdit();
   }
   return result;
 }
@@ -249,7 +220,7 @@ function main() {
       typeof entry.command !== 'string';
     if (isBrokenEccForm) {
       toRemoveLog.push(`mcp_servers.${name} (invalid url entry from earlier ECC versions)`);
-      raw = removeServerFromText(raw, name, existing);
+      raw = removeServerFromText(raw, name);
       log(`  [repair] mcp_servers.${name} — url is not valid for Codex stdio servers, removing`);
     }
   }
@@ -272,9 +243,9 @@ function main() {
     if (disabledServers.has(name)) {
       if (finalEntry) {
         toRemoveLog.push(`mcp_servers.${resolvedLabel} (disabled)`);
-        raw = removeServerFromText(raw, resolvedLabel, existing);
+        raw = removeServerFromText(raw, resolvedLabel);
         if (resolvedLabel !== name) {
-          raw = removeServerFromText(raw, name, existing);
+          raw = removeServerFromText(raw, name);
         }
       }
       log(`  [skip] mcp_servers.${name} (disabled)`);
@@ -285,13 +256,13 @@ function main() {
       if (updateMcp) {
         // --update-mcp: remove existing section (and legacy alias), will re-add below
         toRemoveLog.push(`mcp_servers.${resolvedLabel}`);
-        raw = removeServerFromText(raw, resolvedLabel, existing);
+        raw = removeServerFromText(raw, resolvedLabel);
         if (resolvedLabel !== name) {
-          raw = removeServerFromText(raw, name, existing);
+          raw = removeServerFromText(raw, name);
         }
         if (legacyName && hasCanonical) {
           toRemoveLog.push(`mcp_servers.${legacyName}`);
-          raw = removeServerFromText(raw, legacyName, existing);
+          raw = removeServerFromText(raw, legacyName);
         }
         toAppend.push(spec.toml);
       } else {
@@ -318,6 +289,12 @@ function main() {
   }
 
   const appendText = '\n' + toAppend.join('\n\n') + '\n';
+  const nextRaw = raw + (toAppend.length > 0 ? appendText : '');
+  try {
+    TOML.parse(nextRaw);
+  } catch {
+    unsafeEdit();
+  }
 
   if (dryRun) {
     if (toRemoveLog.length > 0) {
@@ -335,8 +312,7 @@ function main() {
   // For --update-mcp, we modified `raw` above, so write the full file + appended sections.
   if (updateMcp || hasRemovals) {
     for (const label of toRemoveLog) log(`  [update] ${label}`);
-    const cleaned = raw.replace(/\n+$/, '\n');
-    fs.writeFileSync(configPath, cleaned + (toAppend.length > 0 ? appendText : ''), 'utf8');
+    fs.writeFileSync(configPath, nextRaw, 'utf8');
   } else {
     fs.appendFileSync(configPath, appendText, 'utf8');
   }
