@@ -107,7 +107,7 @@ const PARTIAL_OK = Object.freeze({ partialOk: true });
 const PLAIN_PATCH = Object.freeze(['--no-ext-diff', '--no-textconv']);
 
 function unique(list) {
-  return list.filter((entry, index) => list.indexOf(entry) === index);
+  return [...new Set(list)];
 }
 
 /**
@@ -228,10 +228,12 @@ function collectFilesFromCommit(runGit, io, revision, root) {
   const baseline = parents.length === 0 ? EMPTY_TREE : parents[0];
   // lstat, not exists: a dangling symlink is still a current file to review.
   const existing = touched.filter((file) => pathEntryExists(io, path.resolve(root, file)));
+  const existingPaths = new Set(existing);
   // A submodule (gitlink) shows up as a directory; report its pointer change
   // instead of trying to read it as a file.
   const directories = existing.filter((file) => isDirectory(io, path.resolve(root, file)));
-  const present = existing.filter((file) => !directories.includes(file));
+  const directoryPaths = new Set(directories);
+  const present = existing.filter((file) => !directoryPaths.has(file));
   const directorySections = directories.map((file) => {
     const pointer = runGit(['diff', ...PLAIN_PATCH, '--submodule=short', baseline, '--', file], PARTIAL_OK);
     return `=== ${file} === (directory or submodule; current pointer vs ${baseline} follows)\n${pointer || `(no change vs ${baseline})`}`;
@@ -239,7 +241,7 @@ function collectFilesFromCommit(runGit, io, revision, root) {
   // Paths that are absent now (deleted by the commit and never restored, or
   // removed during repair) stay under review as a deletion against the parent
   // baseline, so an unresolved or new deletion can never become an empty PASS.
-  const absent = touched.filter((file) => !existing.includes(file));
+  const absent = touched.filter((file) => !existingPaths.has(file));
   const absentSections = absent.map((file) => {
     const hunk = runGit(['diff', ...PLAIN_PATCH, baseline, '--', file], PARTIAL_OK);
     const status = hunk
