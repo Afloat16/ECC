@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { resolveInvocationEnvironment } = require('../invocation-environment');
 const {
   HOME_INSTALL_EXCLUDED_SOURCE_PATHS, createInstallTargetAdapter, createManagedOperation,
 } = require('./helpers');
@@ -9,6 +10,12 @@ const adapter = createInstallTargetAdapter({
   target: 'codex',
   kind: 'home',
   rootSegments: ['.codex'],
+  resolveRoot(input, homeDir) {
+    const { CODEX_HOME: configured } = resolveInvocationEnvironment(input);
+    return typeof configured === 'string' && configured !== ''
+      ? path.resolve(configured)
+      : path.join(homeDir, '.codex');
+  },
   installStatePathSegments: ['ecc-install-state.json'],
   nativeRootRelativePath: '.codex',
   excludedSourcePaths: HOME_INSTALL_EXCLUDED_SOURCE_PATHS,
