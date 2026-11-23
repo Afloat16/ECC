@@ -24,9 +24,6 @@ const TRUNCATION_NOTE = '\n\n[diff truncated: read the listed files directly for
 // git rev-parse with --end-of-options.
 const SAFE_REF = /^[^-\s\0][^\s\0]*$/;
 
-// git's well-known empty tree object; lets an unborn HEAD diff against "nothing".
-const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
-
 /**
  * @param {string[]} args
  * @param {string} cwd
@@ -142,10 +139,15 @@ function collectWorkingTree(runGit, from) {
   };
 }
 
+/** Hash in this repository's object format; omitting -w keeps this read-only. */
+function resolveEmptyTree(runGit) {
+  return runGit(['hash-object', '-t', 'tree', '--stdin']).trim();
+}
+
 /** HEAD does not exist before the first commit; diff the index against the empty tree then. */
 function resolveHead(runGit) {
   const sha = runGit(['rev-parse', '-q', '--verify', 'HEAD^{commit}'], { allowFailure: true }).trim();
-  return sha ? 'HEAD' : EMPTY_TREE;
+  return sha ? 'HEAD' : resolveEmptyTree(runGit);
 }
 
 function collectBase(runGit, base) {
@@ -225,7 +227,7 @@ function collectFilesFromCommit(runGit, io, revision, root) {
     : splitNul(runGit(['diff', '--no-renames', '--name-only', '-z', parents[0], sha, '--']));
   // Baseline is the reviewed commit's parent, so an unfixed change is still
   // visible in the repair round (HEAD would hide it).
-  const baseline = parents.length === 0 ? EMPTY_TREE : parents[0];
+  const baseline = parents.length === 0 ? resolveEmptyTree(runGit) : parents[0];
   // lstat, not exists: a dangling symlink is still a current file to review.
   const existing = touched.filter((file) => pathEntryExists(io, path.resolve(root, file)));
   // A submodule (gitlink) shows up as a directory; report its pointer change

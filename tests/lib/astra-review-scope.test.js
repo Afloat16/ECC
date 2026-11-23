@@ -37,7 +37,11 @@ const HEAD_RESOLVES = [/^rev-parse -q --verify HEAD\^\{commit\}$/, 'headsha\n'];
 
 function fakeGit(responses, { unbornHead = false } = {}) {
   const calls = [];
-  const rules = unbornHead ? responses : [...responses, HEAD_RESOLVES];
+  const rules = [
+    ...responses,
+    [/^hash-object -t tree --stdin$/, '4b825dc642cb6eb9a060e54bf8d69288fbee4904\n'],
+    ...(unbornHead ? [] : [HEAD_RESOLVES]),
+  ];
   const runGit = (args) => {
     calls.push(args);
     const key = args.join(' ');
