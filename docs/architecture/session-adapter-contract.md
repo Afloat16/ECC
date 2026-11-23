@@ -267,6 +267,21 @@ Consumers MUST NOT:
 - Intent seed paths: parsed from `### Context to Load`
 - Artifacts: `sessionFile`, `context`
 
+The context field is the first closed, top-level fenced block immediately after
+that heading, allowing intervening blank lines. LF and CRLF input are accepted.
+Backtick and tilde fences follow the matching-marker and minimum-length rules:
+the closing line must use the opening marker at least as many times and contain
+only optional surrounding indentation/trailing whitespace. Inline markers remain
+literal context. The heading and fences may have up to three leading spaces;
+opening-fence indentation is removed from the body. Info strings are accepted,
+except backticks inside a backtick fence's info string.
+
+Headings inside another fenced example do not provide session context. Missing
+or unclosed context blocks remain absent. This is a reader for the session-file
+field, not a general Markdown renderer; other session fields retain their own
+parsers. The source file is not rewritten, and context text retains its original
+line endings.
+
 ## Validation Reference
 
 The repo implementation validates:

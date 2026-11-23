@@ -241,6 +241,47 @@ function getSessionContent(sessionPath) {
   return readFile(sessionPath);
 }
 
+// Read a closed, top-level Context to Load block. Track other fences too so
+// an example in session notes cannot supply the real session's context.
+function extractContextBlock(content) {
+  let expectingBlock = false;
+  let fence = null;
+
+  for (let offset = 0; offset < content.length;) {
+    const lineStart = offset;
+    const newline = content.indexOf('\n', offset);
+    const lineEnd = newline < 0 ? content.length : newline;
+    const line = content.slice(offset, lineEnd).replace(/\r$/, '');
+    offset = newline < 0 ? content.length : newline + 1;
+    if (fence) {
+      const closing = line.match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/);
+      if (closing && closing[1][0] === fence.marker && closing[1].length >= fence.length) {
+        if (fence.start !== null) {
+          const body = content.slice(fence.start, lineStart);
+          return (fence.indent ? body.replace(/^ {1,3}/gm, spaces => spaces.slice(fence.indent)) : body).trim();
+        }
+        fence = null;
+      }
+      continue;
+    }
+
+    const opening = line.match(/^( {0,3})(`{3,}|~{3,})(.*)$/);
+    if (opening && (opening[2][0] === '~' || !opening[3].includes('`'))) {
+      fence = { marker: opening[2][0], length: opening[2].length,
+        indent: opening[1].length, start: expectingBlock ? offset : null };
+      expectingBlock = false;
+      continue;
+    }
+
+    if (/^ {0,3}### Context to Load[ \t]*$/.test(line)) {
+      expectingBlock = true;
+    } else if (line.trim()) {
+      expectingBlock = false;
+    }
+  }
+  return '';
+}
+
 /**
  * Parse session metadata from markdown content
  * @param {string} content - Session markdown content
@@ -330,10 +371,7 @@ function parseSessionMetadata(content) {
   }
 
   // Extract context to load
-  const contextSection = content.match(/### Context to Load\s*\n```\n([\s\S]*?)```/);
-  if (contextSection) {
-    metadata.context = contextSection[1].trim();
-  }
+  metadata.context = extractContextBlock(content);
 
   return metadata;
 }
