@@ -10,6 +10,7 @@ const { normalizeCodexWorktreeSession, persistCanonicalSnapshot } = require('./c
 const CODEX_TARGET_PREFIXES = ['codex-worktree:', 'codex:'];
 const ROLLOUT_PREFIX = 'rollout-';
 const RECENT_ACTIVITY_THRESHOLD_MS = 5 * 60 * 1000;
+const READ_CHUNK_BYTES = 64 * 1024;
 
 function parseCodexTarget(target) {
   if (typeof target !== 'string') {
@@ -134,24 +135,60 @@ function resolveRolloutPath(target, cwd, options, context) {
   throw new Error(`Unsupported Codex session target: ${target}`);
 }
 
-function readJsonLines(filePath) {
-  const raw = fs.readFileSync(filePath, 'utf8');
-  const records = [];
+function completeLine(fragments, last) {
+  if (!fragments) return last.toString('utf8');
+  const bytes = Buffer.allocUnsafe(fragments.length + last.length);
+  last.copy(bytes, fragments.length);
+  for (let part = fragments; part; part = part.previous) {
+    part.bytes.copy(bytes, part.length - part.bytes.length);
+  }
+  return bytes.toString('utf8');
+}
 
-  for (const line of raw.split('\n')) {
+// Decode UTF-8 only after assembling a complete JSONL record. Linking partial
+// buffers avoids recopying an ever-growing prefix for a large record.
+function* readRolloutLines(filePath) {
+  const descriptor = fs.openSync(filePath, 'r');
+  try {
+    const buffer = Buffer.allocUnsafe(READ_CHUNK_BYTES);
+    let fragments = null;
+    for (;;) {
+      const count = fs.readSync(descriptor, buffer, 0, buffer.length, null);
+      if (count === 0) break;
+      const chunk = buffer.subarray(0, count);
+      let start = 0;
+      for (let end = chunk.indexOf(0x0a); end >= 0; end = chunk.indexOf(0x0a, start)) {
+        yield completeLine(fragments, chunk.subarray(start, end));
+        fragments = null;
+        start = end + 1;
+      }
+      if (start < count) {
+        fragments = {
+          bytes: Buffer.from(chunk.subarray(start)),
+          length: (fragments?.length || 0) + count - start,
+          previous: fragments,
+        };
+      }
+    }
+    if (fragments) yield completeLine(fragments, Buffer.alloc(0));
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function* readJsonLines(filePath) {
+  for (const line of readRolloutLines(filePath)) {
     const trimmed = line.trim();
     if (trimmed.length === 0) {
       continue;
     }
 
     try {
-      records.push(JSON.parse(trimmed));
+      yield JSON.parse(trimmed);
     } catch {
       // Rollout logs are append-only; skip partial/corrupt trailing lines.
     }
   }
-
-  return records;
 }
 
 function extractText(content) {
@@ -212,13 +249,8 @@ function recordTimestampMs(record) {
   return Number.isNaN(ms) ? null : ms;
 }
 
-function deriveLastActivityMs(records, fallbackPath) {
-  for (let index = records.length - 1; index >= 0; index -= 1) {
-    const ms = recordTimestampMs(records[index]);
-    if (ms !== null) {
-      return ms;
-    }
-  }
+function deriveLastActivityMs(lastTimestamp, fallbackPath) {
+  if (lastTimestamp !== null) return lastTimestamp;
 
   try {
     return fs.statSync(fallbackPath).mtimeMs;
@@ -227,15 +259,8 @@ function deriveLastActivityMs(records, fallbackPath) {
   }
 }
 
-function deriveModel(meta, records) {
-  for (let index = records.length - 1; index >= 0; index -= 1) {
-    const record = records[index];
-    if (record && record.type === 'turn_context' && record.payload) {
-      if (typeof record.payload.model === 'string' && record.payload.model.length > 0) {
-        return record.payload.model;
-      }
-    }
-  }
+function deriveModel(meta, latestTurnModel) {
+  if (latestTurnModel !== null) return latestTurnModel;
 
   if (meta && typeof meta.model === 'string' && meta.model.length > 0) {
     return meta.model;
@@ -246,6 +271,21 @@ function deriveModel(meta, records) {
   }
 
   return null;
+}
+
+function readRolloutFacts(rolloutPath) {
+  let facts = { meta: null, objective: '', model: null, lastTimestamp: null, recordCount: 0 };
+  for (const record of readJsonLines(rolloutPath)) {
+    const model = record?.type === 'turn_context' ? record.payload?.model : null;
+    facts = {
+      meta: facts.meta === null && record?.type === 'session_meta' ? record.payload || {} : facts.meta,
+      objective: facts.objective || deriveObjective([record]),
+      model: typeof model === 'string' && model.length > 0 ? model : facts.model,
+      lastTimestamp: recordTimestampMs(record) ?? facts.lastTimestamp,
+      recordCount: facts.recordCount + 1,
+    };
+  }
+  return facts;
 }
 
 function resolveGitBranch(cwd, resolveBranchImpl) {
@@ -277,12 +317,13 @@ function resolveGitBranch(cwd, resolveBranchImpl) {
 }
 
 function parseCodexRollout(rolloutPath, options = {}) {
-  const records = readJsonLines(rolloutPath);
-  const metaRecord = records.find(record => record && record.type === 'session_meta');
-  const meta = (metaRecord && metaRecord.payload) || {};
+  // Every record contributes to the count, but only these summary facts survive
+  // the scan. Memory follows the largest record, not the entire session history.
+  const facts = readRolloutFacts(rolloutPath);
+  const meta = facts.meta || {};
 
   const cwd = typeof meta.cwd === 'string' && meta.cwd.length > 0 ? meta.cwd : null;
-  const lastActivityMs = deriveLastActivityMs(records, rolloutPath);
+  const lastActivityMs = deriveLastActivityMs(facts.lastTimestamp, rolloutPath);
   const isRecent = lastActivityMs !== null && (Date.now() - lastActivityMs) <= RECENT_ACTIVITY_THRESHOLD_MS;
 
   return {
@@ -292,12 +333,12 @@ function parseCodexRollout(rolloutPath, options = {}) {
     sessionPath: rolloutPath,
     cwd,
     branch: resolveGitBranch(cwd, options.resolveBranchImpl),
-    objective: deriveObjective(records),
-    model: deriveModel(meta, records),
+    objective: facts.objective,
+    model: deriveModel(meta, facts.model),
     originator: typeof meta.originator === 'string' ? meta.originator : null,
     cliVersion: typeof meta.cli_version === 'string' ? meta.cli_version : null,
     startedAt: typeof meta.timestamp === 'string' ? meta.timestamp : null,
-    recordCount: records.length,
+    recordCount: facts.recordCount,
     active: isRecent
   };
 }
