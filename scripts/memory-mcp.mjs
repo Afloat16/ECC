@@ -537,6 +537,7 @@ function runStdioServer({
 } = {}) {
   const service = createMemoryMcpService(serviceOptions);
   let pending = Buffer.alloc(0);
+  let pendingBytes = 0;
   let discardingOversizedLine = false;
   const queue = [];
   let queuedBytes = 0;
@@ -607,6 +608,25 @@ function runStdioServer({
     });
   };
 
+  const resetPending = () => {
+    pending = Buffer.alloc(0);
+    pendingBytes = 0;
+  };
+
+  const appendPartial = segment => {
+    const required = pendingBytes + segment.length;
+    if (required > pending.length) {
+      // Grow geometrically so small stream fragments do not repeatedly copy
+      // the entire prefix. The caller checks the message limit before growing.
+      const capacity = Math.min(MAX_MESSAGE_BYTES, Math.max(1024, pending.length * 2, required));
+      const grown = Buffer.allocUnsafe(capacity);
+      pending.copy(grown, 0, 0, pendingBytes);
+      pending = grown;
+    }
+    segment.copy(pending, pendingBytes);
+    pendingBytes = required;
+  };
+
   input.on('data', chunk => {
     if (overloaded) return;
     const incoming = Buffer.from(chunk);
@@ -618,18 +638,20 @@ function runStdioServer({
 
       if (discardingOversizedLine) {
         if (newlineIndex >= 0) discardingOversizedLine = false;
-      } else if (pending.length + segment.length > MAX_MESSAGE_BYTES) {
-        pending = Buffer.alloc(0);
+      } else if (pendingBytes + segment.length > MAX_MESSAGE_BYTES) {
+        resetPending();
         reportOversizedLine();
         discardingOversizedLine = newlineIndex < 0;
+      } else if (newlineIndex >= 0) {
+        // Queued frames own exactly their bytes; neither the reusable partial
+        // buffer nor a potentially large incoming chunk stays attached to them.
+        const line = Buffer.allocUnsafe(pendingBytes + segment.length);
+        pending.copy(line, 0, 0, pendingBytes);
+        segment.copy(line, pendingBytes);
+        resetPending();
+        processLine(line);
       } else {
-        pending = pending.length === 0
-          ? Buffer.from(segment)
-          : Buffer.concat([pending, segment]);
-        if (newlineIndex >= 0) {
-          processLine(pending);
-          pending = Buffer.alloc(0);
-        }
+        appendPartial(segment);
       }
 
       if (newlineIndex < 0) break;
@@ -639,7 +661,11 @@ function runStdioServer({
   });
 
   input.on('end', () => {
-    if (pending.length > 0) processLine(pending);
+    if (pendingBytes > 0) {
+      const line = Buffer.from(pending.subarray(0, pendingBytes));
+      resetPending();
+      processLine(line);
+    }
   });
 
   input.on('error', () => {
