@@ -142,16 +142,15 @@ function summarizeEnv(env) {
   return { envKeys, hasSecrets };
 }
 
-// A stable identity for de-duplication across harnesses. Two server configs
-// with the same transport + command + args + url collapse to one logical
-// server even if their names differ slightly.
+// A stable configuration identity for cross-harness drift detection. Keep the
+// command and each argument separate: joining with spaces conflates distinct
+// argument vectors, including empty arguments and command paths with spaces.
 function buildSignature({ transport, command, args, url }) {
   if (transport === 'http' || transport === 'sse') {
     return `${transport}:${url || ''}`;
   }
 
-  const argString = asStringArray(args).join(' ');
-  return `stdio:${[command, argString].filter(Boolean).join(' ')}`.trim();
+  return `stdio:${JSON.stringify([command || null, asStringArray(args)])}`;
 }
 
 // Normalize a single raw server entry (from any reader) to ecc.mcp.v1 shape.
