@@ -97,7 +97,8 @@ function createGitRunner(repoRoot, runImpl = defaultRunImpl) {
 
     // Uncommitted changes in a worktree (status --porcelain over its own path).
     isDirty(worktreePath) {
-      const result = runImpl(['status', '--porcelain'], { cwd: worktreePath });
+      // Cleanup eligibility must not inherit display settings that hide work.
+      const result = runImpl(['status', '--porcelain', '--untracked-files=all', '--ignore-submodules=none'], { cwd: worktreePath });
       return result.status === 0 ? (result.stdout || '').trim().length > 0 : false;
     },
 
