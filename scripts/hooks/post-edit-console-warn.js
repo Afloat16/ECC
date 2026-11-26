@@ -12,6 +12,26 @@
 const { readFile } = require('../lib/utils');
 
 const MAX_DIRECT_STDIN_BYTES = 16 * 1024 * 1024;
+
+function findConsoleWarnings(content) {
+  const matches = [];
+  let start = 0;
+  let lineNumber = 1;
+
+  // Only five warnings are displayed. Avoid allocating a line array and an
+  // object for every line in large generated files, and stop once it is full.
+  while (start < content.length && matches.length < 5) {
+    const newline = content.indexOf('\n', start);
+    const end = newline === -1 ? content.length : newline;
+    const line = content.slice(start, end);
+    if (/console\.log/.test(line)) matches.push(`${lineNumber}: ${line.trim()}`);
+    start = end + 1;
+    lineNumber++;
+  }
+
+  return matches;
+}
+
 function run(data) {
   const warnings = [];
   try {
@@ -21,15 +41,11 @@ function run(data) {
     if (filePath && /\.(ts|tsx|js|jsx)$/.test(filePath)) {
       const content = readFile(filePath);
       if (content) {
-        const matches = content
-          .split('\n')
-          .map((line, index) => ({ line, index }))
-          .filter(item => /console\.log/.test(item.line))
-          .map(item => `${item.index + 1}: ${item.line.trim()}`);
+        const matches = findConsoleWarnings(content);
 
         if (matches.length > 0) {
           warnings.push(`[Hook] WARNING: console.log found in ${filePath}`);
-          warnings.push(...matches.slice(0, 5));
+          warnings.push(...matches);
           warnings.push('[Hook] Remove console.log before committing');
         }
       }
