@@ -63,6 +63,7 @@ const {
 } = require('./stale-operations-reconciliation');
 const { buildInstallIndex, rewriteRelativeLinks } = require('./link-rewrite');
 const { transformInstallContent } = require('./content-transform');
+const { deepMergeJson } = require('./json-ops');
 const { assertScriptBoundary, isScriptBoundary } = require('./opencode-script-boundary');
 
 function isMarkdownPath(filePath) {
@@ -197,22 +198,6 @@ function cloneJsonValue(value) {
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function deepMergeJson(baseValue, patchValue) {
-  if (!isPlainObject(baseValue) || !isPlainObject(patchValue)) {
-    return cloneJsonValue(patchValue);
-  }
-
-  const merged = { ...baseValue };
-  for (const [key, value] of Object.entries(patchValue)) {
-    if (isPlainObject(value) && isPlainObject(merged[key])) {
-      merged[key] = deepMergeJson(merged[key], value);
-    } else {
-      merged[key] = cloneJsonValue(value);
-    }
-  }
-  return merged;
 }
 
 function formatJson(value) {

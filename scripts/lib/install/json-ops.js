@@ -87,15 +87,17 @@ function deepMergeJson(baseValue, patchValue) {
     return cloneJsonValue(patchValue);
   }
 
-  const merged = { ...baseValue };
-  for (const [key, value] of Object.entries(patchValue)) {
-    if (isPlainObject(value) && isPlainObject(merged[key])) {
-      merged[key] = deepMergeJson(merged[key], value);
-    } else {
-      merged[key] = cloneJsonValue(value);
-    }
-  }
-  return merged;
+  // JSON keys are data, including __proto__. Define own properties without
+  // invoking inherited setters or merging inherited prototype values.
+  return Object.fromEntries([
+    ...Object.entries(baseValue),
+    ...Object.entries(patchValue).map(([key, value]) => [
+      key,
+      Object.hasOwn(baseValue, key) && isPlainObject(value) && isPlainObject(baseValue[key])
+        ? deepMergeJson(baseValue[key], value)
+        : cloneJsonValue(value),
+    ]),
+  ]);
 }
 
 function jsonContainsSubset(actualValue, expectedValue) {
