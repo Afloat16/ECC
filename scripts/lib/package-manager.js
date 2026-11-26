@@ -112,7 +112,9 @@ function detectFromLockFile(projectDir = process.cwd()) {
 }
 
 /**
- * Detect package manager from package.json packageManager field
+ * Detect package manager from package.json packageManager metadata.
+ * Fall back to the single devEngines.packageManager declaration, as Corepack
+ * does when the top-level field is absent. Version selection belongs to the PM.
  */
 function detectFromPackageJson(projectDir = process.cwd()) {
   const packageJsonPath = path.join(projectDir, 'package.json');
@@ -126,6 +128,12 @@ function detectFromPackageJson(projectDir = process.cwd()) {
         const pmName = pkg.packageManager.split('@')[0];
         if (isSupportedPackageManager(pmName)) {
           return pmName;
+        }
+      } else {
+        const engine = pkg.devEngines?.packageManager;
+        if (engine && typeof engine === 'object' && !Array.isArray(engine)
+          && isSupportedPackageManager(engine.name)) {
+          return engine.name;
         }
       }
     } catch {
@@ -161,7 +169,7 @@ function getAvailablePackageManagers() {
  * Detection priority:
  * 1. Environment variable CLAUDE_PACKAGE_MANAGER
  * 2. Project-specific config (in .claude/package-manager.json)
- * 3. package.json packageManager field
+ * 3. package.json packageManager or devEngines.packageManager field
  * 4. Lock file detection
  * 5. Global user preference (in ~/.claude/package-manager.json)
  * 6. Default to npm (no child processes spawned)

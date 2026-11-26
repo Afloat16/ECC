@@ -61,7 +61,7 @@ export interface GetPackageManagerOptions {
  * Detection priority:
  * 1. CLAUDE_PACKAGE_MANAGER environment variable
  * 2. Project-specific config (.claude/package-manager.json)
- * 3. package.json `packageManager` field
+ * 3. package.json `packageManager`, falling back to `devEngines.packageManager`
  * 4. Lock file detection
  * 5. Global user preference (~/.claude/package-manager.json)
  * 6. Default to npm (no child processes spawned)
@@ -92,7 +92,7 @@ export function getAvailablePackageManagers(): PackageManagerName[];
 /** Detect package manager from lock file in the given directory */
 export function detectFromLockFile(projectDir?: string): PackageManagerName | null;
 
-/** Detect package manager from package.json `packageManager` field */
+/** Detect package manager from package.json `packageManager` or `devEngines.packageManager` */
 export function detectFromPackageJson(projectDir?: string): PackageManagerName | null;
 
 /**
