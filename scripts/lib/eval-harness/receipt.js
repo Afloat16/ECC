@@ -94,8 +94,25 @@ function projectionMatches(dir, expected, receipt) {
   }
 }
 
+function signatureVerifies(verifier, receiver, hash, signature) {
+  try {
+    const result = verifier.call(receiver, hash, signature);
+    // Verification is synchronous. A pending result is never approval; consume
+    // a rejected thenable so an unsupported async callback cannot crash later.
+    if (result && typeof result.then === 'function') {
+      Promise.resolve(result).catch(() => {});
+      return false;
+    }
+    return result === true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Verify a receipt against a capsule directory (or exported bundle).
+ * A supplied verifier must synchronously return the boolean true to approve
+ * the signature. Exceptions and asynchronous/non-boolean results fail closed.
  * Returns { ok, check, reason }. `check` names the first failing check:
  *   schema, receipt_hash, signature, journal_present, journal_integrity,
  *   truncation, stale_checkpoint, capsule_root, metadata, projection, artifact, gate_receipt.
@@ -114,7 +131,7 @@ function verifyReceipt(receipt, capsuleDir, options = {}) {
     if (!signature) {
       return fail('signature', 'receipt is unsigned but a verifier was supplied');
     }
-    if (!options.verifier(claimedHash, signature)) {
+    if (!signatureVerifies(options.verifier, options, claimedHash, signature)) {
       return fail('signature', 'signature does not verify for this receipt_hash');
     }
   }
