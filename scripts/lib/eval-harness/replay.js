@@ -104,6 +104,8 @@ class FixtureStore {
  * tools: { name: { effect_class, determinism: 'deterministic'|'nondeterministic', impl(args) } }
  * options: { mode: 'record'|'replay', store: FixtureStore, maxEffectClass: 'SE2', onCall(entry) }
  * Record calls return a Promise only when the implementation returns a thenable.
+ * Own tool declarations are captured at construction; create another replayer
+ * to change its registry. Implementations retain their original tool receiver.
  */
 function createReplayer(tools, options = {}) {
   const mode = options.mode || 'replay';
@@ -115,13 +117,21 @@ function createReplayer(tools, options = {}) {
   if (!store) {
     throw new ReplayError('replay.no_store', 'a FixtureStore is required');
   }
+  const declarations = new Map();
   for (const [name, tool] of Object.entries(tools)) {
-    if (!envelope.EFFECT_CLASSES.includes(tool.effect_class)) {
+    const declaration = Object.freeze({
+      effect_class: tool.effect_class,
+      determinism: tool.determinism,
+      impl: tool.impl,
+      receiver: tool,
+    });
+    if (!envelope.EFFECT_CLASSES.includes(declaration.effect_class)) {
       throw new ReplayError('replay.bad_declaration', `tool ${name} must declare an effect_class`);
     }
-    if (!['deterministic', 'nondeterministic'].includes(tool.determinism)) {
+    if (!['deterministic', 'nondeterministic'].includes(declaration.determinism)) {
       throw new ReplayError('replay.bad_declaration', `tool ${name} must declare determinism`);
     }
+    declarations.set(name, declaration);
   }
 
   const calls = [];
@@ -136,7 +146,7 @@ function createReplayer(tools, options = {}) {
     mode,
     calls,
     call(name, args = {}) {
-      const tool = tools[name];
+      const tool = declarations.get(name);
       if (!tool) {
         throw new ReplayError('tool.unknown', `tool ${name} is not declared`);
       }
@@ -157,7 +167,7 @@ function createReplayer(tools, options = {}) {
       // Keep fixture identity at invocation time, even if the caller or the
       // implementation changes a nested argument before an async result settles.
       const invocationArgs = JSON.parse(canonicalJson(args));
-      const response = tool.impl(args);
+      const response = tool.impl.call(tool.receiver, args);
       const recordResponse = (resolved) => {
         const record = store.put(name, invocationArgs, resolved);
         emit({ tool: name, mode, status: 'recorded', fixture_key: record.key, args_hash: record.args_hash, response_hash: record.response_hash });
