@@ -129,7 +129,9 @@ function buildDependencyGraph(repoRoot, files, deps = {}) {
  */
 function buildDependencyGraphFromSources(sources = {}) {
   const adjacency = {};
-  const fileList = Object.keys(sources).map(f => f.replace(/\\/g, '/'));
+  // Keep content paired with its original key while normalizing path spelling.
+  const entries = Object.entries(sources).map(([file, source]) => [file.replace(/\\/g, '/'), source]);
+  const fileList = entries.map(([file]) => file);
   const fileSet = new Set(fileList);
   const tryResolve = (fromFile, spec) => {
     const base = path.posix.dirname(fromFile);
@@ -137,9 +139,9 @@ function buildDependencyGraphFromSources(sources = {}) {
     const candidates = resolutionCandidates(target, path.posix);
     return candidates.find(c => fileSet.has(c)) || null;
   };
-  for (const file of fileList) {
+  for (const [file, source] of entries) {
     const edges = new Set();
-    for (const spec of extractRelativeSpecifiers(String(sources[file] || ''))) {
+    for (const spec of extractRelativeSpecifiers(String(source || ''))) {
       const resolved = tryResolve(file, spec);
       if (resolved && resolved !== file) edges.add(resolved);
     }
