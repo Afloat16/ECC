@@ -26,14 +26,16 @@ const MAX_STDIN = 1024 * 1024; // 1MB limit
  * @returns {string[]} Array of staged file paths
  */
 function getStagedFiles() {
-  const result = spawnSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACMR'], {
+  const result = spawnSync('git', ['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR'], {
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe']
   });
   if (result.status !== 0) {
     return [];
   }
-  return result.stdout.trim().split('\n').filter(f => f.length > 0);
+  // Git's display form quotes Unicode/control characters; only NUL framing
+  // preserves exact index paths, including leading spaces and line breaks.
+  return result.stdout.split('\0').filter(f => f.length > 0);
 }
 
 function getStagedFileContent(filePath) {
