@@ -79,7 +79,12 @@ function sourceIdentity(stat) {
 
 function hashWindow(descriptor, position, length) {
   const buffer = Buffer.alloc(length);
-  if (length > 0) fs.readSync(descriptor, buffer, 0, length, position);
+  let offset = 0;
+  while (offset < length) {
+    const bytesRead = fs.readSync(descriptor, buffer, offset, length - offset, position + offset);
+    if (bytesRead === 0) throw new Error('Cost log ended during fingerprint read');
+    offset += bytesRead;
+  }
   return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
