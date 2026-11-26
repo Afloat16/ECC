@@ -28,6 +28,8 @@ function usage() {
     'Codex, OpenCode), normalize them to ecc.mcp.v1, and report which servers',
     'are configured in more than one harness. Secrets are never printed; only',
     'env key names are shown.',
+    'Claude Code includes user settings and the current project\'s local and',
+    'shared .mcp.json settings.',
     '',
     'Options:',
     '  --json              Print the full ecc.mcp.v1 inventory as JSON',
@@ -84,7 +86,9 @@ function main(argv = process.argv) {
     return;
   }
 
-  const inventory = collectMcpInventory();
+  const inventory = collectMcpInventory({
+    readerOptions: { 'claude-code': { projectDir: process.cwd() } }
+  });
 
   if (options.json) {
     console.log(JSON.stringify(inventory, null, 2));
