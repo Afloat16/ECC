@@ -47,8 +47,17 @@ function getManifestVersion(sourceRoot) {
 
 function getRepoCommit(sourceRoot) {
   try {
+    // A packed dependency can live inside a consumer's Git repository. Only
+    // report source provenance for a checkout rooted at the source itself.
+    if (!fs.existsSync(path.join(sourceRoot, '.git'))) return null;
+    const repositoryBindings = new Set([
+      'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_PREFIX',
+    ]);
+    const env = Object.fromEntries(Object.entries(process.env)
+      .filter(([key]) => !repositoryBindings.has(key)));
     return execFileSync('git', ['rev-parse', 'HEAD'], {
       cwd: sourceRoot,
+      env,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 5000
