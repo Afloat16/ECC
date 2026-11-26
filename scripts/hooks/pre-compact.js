@@ -14,7 +14,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { getSessionsDir, getDateTimeString, getTimeString, findFiles, ensureDir, appendFile, readFile, writeFile, getProjectName, log } = require('../lib/utils');
+const { getSessionsDir, getDateTimeString, getTimeString, findFiles, ensureDir, appendFile, readFile, writeFile, getProjectName, getSessionIdShort, sanitizeSessionId, log } = require('../lib/utils');
 const { generateSessionSummary } = require('../lib/llm-summary');
 
 const SUMMARY_START_MARKER = '<!-- ECC:SUMMARY:START -->';
@@ -49,19 +49,27 @@ function normalizePath(p) {
  *   3. otherwise null — do NOT annotate a foreign worktree's session
  * A present-but-blank Worktree header counts as non-legacy (never a project
  * fallback), so a foreign session is not matched by name.
+ * When shortId is supplied, apply these rules only to that session's files.
  *
  * @param {Array<{path: string}>} sessions - newest-first session list
  * @param {string} cwd
  * @param {string} currentProject
  * @param {(p: string) => (string|null)} [readFn]
+ * @param {string|null} [shortId] - Exact saved identity, or null for legacy lookup
  * @returns {string|null} path of the chosen session, or null if none match
  */
-function selectActiveSessionPath(sessions, cwd, currentProject, readFn = readFile) {
+function selectActiveSessionPath(sessions, cwd, currentProject, readFn = readFile, shortId = null) {
   if (!sessions || sessions.length === 0) return null;
   const normalizedCwd = normalizePath(cwd);
   let projectMatch = null;
 
   for (const session of sessions) {
+    // A worktree can host several live sessions. Once this invocation has an
+    // identity, never fall back to a newer neighbor in the same worktree.
+    if (shortId !== null) {
+      const filename = path.basename(session.path).match(/^\d{4}-\d{2}-\d{2}-(.+)-session\.tmp$/);
+      if (!filename || filename[1] !== shortId) continue;
+    }
     const content = readFn(session.path);
     if (!content) continue;
 
@@ -88,6 +96,18 @@ function selectActiveSessionPath(sessions, cwd, currentProject, readFn = readFil
   }
 
   return projectMatch;
+}
+
+function compactionSessionShortId(transcriptPath) {
+  // session-end.js keys summaries by the transcript UUID before falling back
+  // to a session environment ID. Keep that last-eight-character convention.
+  const transcriptId = transcriptPath && path.basename(transcriptPath).match(
+    /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i
+  );
+  if (transcriptId) return sanitizeSessionId(transcriptId[1].slice(-8).toLowerCase());
+  // The writer's legacy fallback reads only CLAUDE_SESSION_ID. Payload or
+  // ECC_SESSION_ID values do not determine its filename for non-UUID paths.
+  return process.env.CLAUDE_SESSION_ID ? getSessionIdShort() : null;
 }
 
 const MAX_STDIN = 1024 * 1024;
@@ -138,9 +158,10 @@ async function main() {
   // Select the session for THIS worktree, not merely the newest across all
   // projects (the sessions dir is shared). Skip when none matches rather than
   // writing the summary into a foreign project's session file.
-  const activeSession = selectActiveSessionPath(sessions, process.cwd(), getProjectName());
+  const shortId = compactionSessionShortId(transcriptPath);
+  const activeSession = selectActiveSessionPath(sessions, process.cwd(), getProjectName(), readFile, shortId);
   if (!activeSession) {
-    log('[PreCompact] No session matches the current worktree; skipping annotation');
+    log('[PreCompact] No session matches the current identity and worktree; skipping annotation');
     process.exit(0);
   }
   const timeStr = getTimeString();
