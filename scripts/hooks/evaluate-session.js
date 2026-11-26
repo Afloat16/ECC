@@ -14,11 +14,11 @@
 
 const path = require('path');
 const fs = require('fs');
+const readline = require('readline');
 const {
   getLearnedSkillsDir,
   ensureDir,
   readFile,
-  countInFile,
   log
 } = require('../lib/utils');
 const { resolveHookSessionId } = require('../lib/hook-session');
@@ -34,6 +34,26 @@ const {
 // observer data directory. A marker is what makes delivery once-per-session: a later
 // user stop in the same session must not block again.
 const DELIVERY_MARKER_PREFIX = 'claude-continuous-learning-delivered-';
+
+async function countUserRecords(transcriptPath) {
+  const stream = fs.createReadStream(transcriptPath, { encoding: 'utf8' });
+  const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  let count = 0;
+  let readError;
+  stream.on('error', error => { readError = error; });
+  try {
+    for await (const line of lines) {
+      let record;
+      try { record = JSON.parse(line); } catch { continue; }
+      if (record && !Array.isArray(record) && record.type === 'user') count++;
+    }
+    if (readError) throw readError;
+    return count;
+  } finally {
+    lines.close();
+    stream.destroy();
+  }
+}
 
 // Read hook input from stdin (Claude Code provides transcript_path via stdin JSON)
 const MAX_STDIN = 1024 * 1024;
@@ -103,8 +123,9 @@ async function main() {
     process.exit(0);
   }
 
-  // Count user messages in session (allow optional whitespace around colon)
-  const messageCount = countInFile(transcriptPath, /"type"\s*:\s*"user"/g);
+  // Count complete top-level records. Nested metadata and partial JSON are
+  // not user turns; stream lines rather than retaining the whole transcript.
+  const messageCount = await countUserRecords(transcriptPath);
 
   // Skip short sessions
   if (messageCount < minSessionLength) {
