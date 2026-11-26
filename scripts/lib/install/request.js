@@ -5,6 +5,10 @@ const { resolveHookConsentFlags } = require('./hook-consent');
 
 const LEGACY_INSTALL_TARGETS = ['claude', 'claude-project', 'cursor', 'antigravity'];
 const LOCALE_COMPONENT_IDS = new Set(Object.values(LOCALE_ALIAS_TO_COMPONENT_ID));
+const VALUE_FLAGS = new Set([
+  '--target', '--config', '--profile', '--modules', '--with', '--without',
+  '--skill', '--skills', '--locale', '--consent-mcp', '--source-sha',
+]);
 
 function dedupeStrings(values) {
   return [...new Set((Array.isArray(values) ? values : []).map(value => String(value).trim()).filter(Boolean))];
@@ -41,6 +45,15 @@ function parseInstallArgs(argv) {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
 
+    // Do not consume a safety switch such as --dry-run as the previous
+    // option's value. Reject malformed requests before planning any writes.
+    if (VALUE_FLAGS.has(arg)) {
+      const value = args[index + 1];
+      if (!value || !value.trim() || value.startsWith('-')) {
+        throw new Error(`Missing value for ${arg}`);
+      }
+    }
+
     if (arg === '--target') {
       parsed.target = args[index + 1] || null;
       index += 1;
@@ -71,9 +84,6 @@ function parseInstallArgs(argv) {
       index += 1;
     } else if (arg === '--locale') {
       const locale = args[index + 1] || '';
-      if (!locale || locale.startsWith('--')) {
-        throw new Error('Missing value for --locale');
-      }
       parsed.locale = locale;
       index += 1;
     } else if (arg === '--enable-hooks') {
@@ -89,9 +99,6 @@ function parseInstallArgs(argv) {
       index += 1;
     } else if (arg === '--source-sha') {
       const sourceSha = args[index + 1] || '';
-      if (!sourceSha || sourceSha.startsWith('-')) {
-        throw new Error('Missing value for --source-sha');
-      }
       parsed.sourceSha = sourceSha;
       index += 1;
     } else if (arg === '--dry-run') {
