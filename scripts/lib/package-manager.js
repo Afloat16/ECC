@@ -80,7 +80,7 @@ function loadConfig() {
 
   if (content) {
     try {
-      return JSON.parse(content);
+      return JSON.parse(content.replace(/^\uFEFF/, ''));
     } catch {
       return null;
     }
@@ -120,7 +120,7 @@ function detectFromPackageJson(projectDir = process.cwd()) {
 
   if (content) {
     try {
-      const pkg = JSON.parse(content);
+      const pkg = JSON.parse(content.replace(/^\uFEFF/, ''));
       if (pkg.packageManager) {
         // Format: "pnpm@8.6.0" or just "pnpm"
         const pmName = pkg.packageManager.split('@')[0];
@@ -188,7 +188,7 @@ function getPackageManager(options = {}) {
   const projectConfig = readFile(projectConfigPath);
   if (projectConfig) {
     try {
-      const config = JSON.parse(projectConfig);
+      const config = JSON.parse(projectConfig.replace(/^\uFEFF/, ''));
       if (isSupportedPackageManager(config.packageManager)) {
         return {
           name: config.packageManager,
