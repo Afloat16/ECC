@@ -84,14 +84,21 @@ function listRolloutFiles(sessionsDir) {
 }
 
 function findLatestRollout(sessionsDir) {
-  const files = listRolloutFiles(sessionsDir);
-  if (files.length === 0) {
-    return null;
+  let latest = null;
+  let latestMtimeMs = -Infinity;
+  for (const filePath of listRolloutFiles(sessionsDir)) {
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.isFile() && stat.mtimeMs > latestMtimeMs) {
+        latest = filePath;
+        latestMtimeMs = stat.mtimeMs;
+      }
+    } catch {
+      // History can be pruned between directory enumeration and stat.
+      // An unavailable candidate must not hide the remaining rollouts.
+    }
   }
-
-  return files
-    .map(filePath => ({ filePath, mtimeMs: fs.statSync(filePath).mtimeMs }))
-    .sort((a, b) => b.mtimeMs - a.mtimeMs)[0].filePath;
+  return latest;
 }
 
 function findRolloutById(sessionsDir, sessionId) {
