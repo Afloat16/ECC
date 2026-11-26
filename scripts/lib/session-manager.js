@@ -264,43 +264,45 @@ function parseSessionMetadata(content) {
   if (!content) return metadata;
 
   // Extract title from first heading
-  const titleMatch = content.match(/^#\s+(.+)$/m);
+  // Metadata values are single-line fields. Blank fields must not consume
+  // the next heading or label through newline-matching whitespace.
+  const titleMatch = content.match(/^#[ \t]+(.+)$/m);
   if (titleMatch) {
-    metadata.title = titleMatch[1].trim();
+    metadata.title = titleMatch[1].trim() || null;
   }
 
   // Extract date
-  const dateMatch = content.match(/\*\*Date:\*\*\s*(\d{4}-\d{2}-\d{2})/);
+  const dateMatch = content.match(/\*\*Date:\*\*[ \t]*(\d{4}-\d{2}-\d{2})/);
   if (dateMatch) {
     metadata.date = dateMatch[1];
   }
 
   // Extract started time
-  const startedMatch = content.match(/\*\*Started:\*\*\s*([\d:]+)/);
+  const startedMatch = content.match(/\*\*Started:\*\*[ \t]*([\d:]+)/);
   if (startedMatch) {
     metadata.started = startedMatch[1];
   }
 
   // Extract last updated
-  const updatedMatch = content.match(/\*\*Last Updated:\*\*\s*([\d:]+)/);
+  const updatedMatch = content.match(/\*\*Last Updated:\*\*[ \t]*([\d:]+)/);
   if (updatedMatch) {
     metadata.lastUpdated = updatedMatch[1];
   }
 
   // Extract control-plane metadata
-  const projectMatch = content.match(/\*\*Project:\*\*\s*(.+)$/m);
+  const projectMatch = content.match(/\*\*Project:\*\*[ \t]*(.+)$/m);
   if (projectMatch) {
-    metadata.project = projectMatch[1].trim();
+    metadata.project = projectMatch[1].trim() || null;
   }
 
-  const branchMatch = content.match(/\*\*Branch:\*\*\s*(.+)$/m);
+  const branchMatch = content.match(/\*\*Branch:\*\*[ \t]*(.+)$/m);
   if (branchMatch) {
-    metadata.branch = branchMatch[1].trim();
+    metadata.branch = branchMatch[1].trim() || null;
   }
 
-  const worktreeMatch = content.match(/\*\*Worktree:\*\*\s*(.+)$/m);
+  const worktreeMatch = content.match(/\*\*Worktree:\*\*[ \t]*(.+)$/m);
   if (worktreeMatch) {
-    metadata.worktree = worktreeMatch[1].trim();
+    metadata.worktree = worktreeMatch[1].trim() || null;
   }
 
   // Extract completed items

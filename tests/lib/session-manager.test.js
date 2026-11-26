@@ -2706,13 +2706,11 @@ file.ts
     assert.strictEqual(meta4.title, 'Padded Title',
       'Extra spaces: \\s+ matches multiple spaces, (.+) captures, .trim() cleans');
 
-    // # followed by just spaces (no actual title text)
-    // Surprising: \s+ is greedy and includes \n, so it matches "    \n\n" (spaces + newlines)
-    // Then (.+) captures "Content" from the next non-empty line!
+    // An empty heading must not borrow text from the next non-empty line.
     const spacesOnly = '#    \n\nContent';
     const meta5 = sessionManager.parseSessionMetadata(spacesOnly);
-    assert.strictEqual(meta5.title, 'Content',
-      'Spaces-only after # → \\s+ greedily matches spaces+newlines, (.+) captures next line text');
+    assert.strictEqual(meta5.title, null,
+      'An empty heading must not consume text from a later line');
 
     // Tab after # — \s includes tab
     const tabTitle = '#\tTab Title\n\nContent';
