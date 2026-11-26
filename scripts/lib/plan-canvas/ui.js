@@ -243,6 +243,7 @@ function canvasClientJs() {
   }
   $('annotate').addEventListener('click', () => setAnnotate(!annotate));
   document.addEventListener('keydown', e => {
+    if (e.isComposing || e.keyCode === 229) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'i') {
       e.preventDefault();
       setAnnotate(!annotate);
@@ -403,6 +404,8 @@ function canvasClientJs() {
   }
   sendBtn.addEventListener('click', () => send());
   input.addEventListener('keydown', e => {
+    // Enter can confirm an input-method candidate before the draft is complete.
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
   $('approve').addEventListener('click', () => send([{ kind: 'verdict', verdict: 'approve' }]));

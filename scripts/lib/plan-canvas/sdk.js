@@ -129,6 +129,8 @@ function artifactSdkJs() {
   cardEl.querySelector('.cancel').addEventListener('click', closeCard);
   cardEl.querySelector('.queue').addEventListener('click', () => queueCard(false));
   cardText.addEventListener('keydown', e => {
+    // Leave candidate confirmation and cancellation to the input method.
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); queueCard(true); }
     else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); queueCard(false); }
     else if (e.key === 'Escape') closeCard();
@@ -215,6 +217,7 @@ function artifactSdkJs() {
     }
   });
   document.addEventListener('keydown', e => {
+    if (e.isComposing || e.keyCode === 229) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'i') {
       e.preventDefault();
       post({ type: 'pc:toggle-mode' });
