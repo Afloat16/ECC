@@ -26,7 +26,8 @@ const PACKAGE_MANAGERS = {
     name: 'pnpm',
     lockFile: 'pnpm-lock.yaml',
     installCmd: 'pnpm install',
-    runCmd: 'pnpm',
+    // Explicit run avoids dispatching a built-in when a script shares its name.
+    runCmd: 'pnpm run',
     execCmd: 'pnpm dlx',
     testCmd: 'pnpm test',
     buildCmd: 'pnpm build',
@@ -36,7 +37,7 @@ const PACKAGE_MANAGERS = {
     name: 'yarn',
     lockFile: 'yarn.lock',
     installCmd: 'yarn',
-    runCmd: 'yarn',
+    runCmd: 'yarn run',
     execCmd: 'yarn dlx',
     testCmd: 'yarn test',
     buildCmd: 'yarn build',
@@ -417,7 +418,7 @@ function getCommandPattern(action) {
     patterns.push(
       `npm run ${escaped}`,
       `pnpm( run)? ${escaped}`,
-      `yarn ${escaped}`,
+      `yarn( run)? ${escaped}`,
       `bun run ${escaped}`
     );
   }

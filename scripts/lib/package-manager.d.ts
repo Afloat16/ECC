@@ -13,7 +13,7 @@ export interface PackageManagerConfig {
   lockFile: string;
   /** Install command (e.g., "npm install") */
   installCmd: string;
-  /** Run script command prefix (e.g., "npm run", "pnpm") */
+  /** Run script command prefix (e.g., "npm run", "pnpm run") */
   runCmd: string;
   /** Execute binary command (e.g., "npx", "pnpm dlx") */
   execCmd: string;

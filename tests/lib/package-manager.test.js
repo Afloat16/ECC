@@ -913,12 +913,12 @@ function runTests() {
   // getRunCommand PM-specific format tests
   console.log('\ngetRunCommand (PM-specific formats):');
 
-  if (test('pnpm custom script: pnpm (no run keyword)', () => {
+  if (test('pnpm custom script: pnpm run <script>', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
     try {
       process.env.CLAUDE_PACKAGE_MANAGER = 'pnpm';
       const cmd = pm.getRunCommand('lint');
-      assert.strictEqual(cmd, 'pnpm lint', 'pnpm uses "pnpm <script>" format');
+      assert.strictEqual(cmd, 'pnpm run lint', 'pnpm explicitly selects the package script');
     } finally {
       if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
       else delete process.env.CLAUDE_PACKAGE_MANAGER;
@@ -926,12 +926,12 @@ function runTests() {
   })) passed++;
   else failed++;
 
-  if (test('yarn custom script: yarn <script>', () => {
+  if (test('yarn custom script: yarn run <script>', () => {
     const originalEnv = process.env.CLAUDE_PACKAGE_MANAGER;
     try {
       process.env.CLAUDE_PACKAGE_MANAGER = 'yarn';
       const cmd = pm.getRunCommand('format');
-      assert.strictEqual(cmd, 'yarn format', 'yarn uses "yarn <script>" format');
+      assert.strictEqual(cmd, 'yarn run format', 'yarn explicitly selects the package script');
     } finally {
       if (originalEnv !== undefined) process.env.CLAUDE_PACKAGE_MANAGER = originalEnv;
       else delete process.env.CLAUDE_PACKAGE_MANAGER;
